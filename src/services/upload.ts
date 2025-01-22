@@ -10,11 +10,12 @@ import {
   networks,
   switchNetworkMetaMask,
 } from "@/services/network";
-import { decryptApiKey, readFileAsUint8Array } from "@/utils";
-
+import { readFileAsUint8Array } from "@/utils";
+import { nanoid } from "nanoid";
+import { StepData } from "@/types";
 // Glitter IPFS API endpoint
 const GLITTER_IPFS_API_URL = "https://ipfs.glitterprotocol.dev/api/v0";
-// RPC 
+// RPC
 const MAINNET_RPC = "https://rpc.ankr.com/eth";
 
 /**
@@ -33,8 +34,13 @@ export interface IAgentData {
   functionDesc: string;
   behaviorDesc: string;
   did: string;
+  dataset: string;
+  blogPrompt: string;
+  hasBlog: boolean;
+  hasRAG: boolean;
   avatar?: string;
   id?: string;
+  agentId: string;
 }
 
 interface IFile {
@@ -62,25 +68,32 @@ const getProvider = async (needSigner = false) => {
     const provider = new ethers.providers.Web3Provider(window.ethereum);
     const network = await provider.getNetwork();
     if (network.chainId === ENetwork.Ethereum) {
-      await switchNetworkMetaMask(ENetwork.Ethereum, provider);
+      await switchNetworkMetaMask(ENetwork.Ethereum);
     }
     return provider;
   }
 
-  if (window.ethereum) {
-    return new ethers.providers.Web3Provider(window.ethereum);
-  }
+  // if (window.ethereum) {
+  //   return new ethers.providers.Web3Provider(window.ethereum);
+  // }
 
   return new ethers.providers.JsonRpcProvider(MAINNET_RPC);
 };
 
-export const getAllRecords = async (
-  pageNum: number,
-  pageSize: number
-): Promise<{ total: number; records: IRecord[] }> => {
+export const getAllRecords = async (): Promise<{
+  total: number;
+  records: IRecord[];
+}> => {
   try {
     const provider = await getProvider();
     const network = await provider.getNetwork();
+    if (network.chainId !== ENetwork.Ethereum) {
+      const { status } = await switchNetworkMetaMask(ENetwork.Ethereum);
+      if (status) {
+        console.log("switch network success");
+        return getAllRecords();
+      }
+    }
     const contractAddress = networks.find(
       (item: INetwork) => item.value === network.chainId
     )?.contractAddr;
@@ -89,24 +102,18 @@ export const getAllRecords = async (
 
     try {
       const count = await contract.getRecordCount();
-      const length = count.toNumber();
-      if (length === 0) {
+      if (count === 0) {
         return {
           total: 0,
           records: [],
         };
       }
+
       // get all records
-      const records = await contract.fetchData(0, length);
-
-
-      // pagination
-      const startIndex = (pageNum - 1) * pageSize;
-      const endIndex = startIndex + pageSize;
-      const paginatedRecords = records;
+      const records = await contract.fetchData(0, count);
 
       // format records
-      const formattedRecords: IRecord[] = paginatedRecords
+      const formattedRecords: IRecord[] = records
         .map((record: any) => ({
           did: record.ensName,
           contenthash: record.contenthash,
@@ -118,10 +125,9 @@ export const getAllRecords = async (
           optionalField: record.optionalField,
           extension: record.extension,
         }))
-        .sort((a: IRecord, b: IRecord) => b.timestamp - a.timestamp)
-        .slice(startIndex, endIndex);
+        .sort((a: IRecord, b: IRecord) => b.timestamp - a.timestamp);
       return {
-        total: length,
+        total: count.toNumber(),
         records: formattedRecords,
       };
     } catch (error) {
@@ -172,7 +178,7 @@ const uploadToGlitter = async (
     if (!data.data?.[0]) {
       throw new Error("Upload failed: No response data");
     }
-    
+
     const item = data.data.find((item: any) => !item.Name.includes("/"));
     return {
       Hash: item.Hash,
@@ -250,6 +256,27 @@ const createHtmlFile = async (content: string): Promise<File> => {
   }
 };
 
+/**
+ * Create JSON file from content
+ * @param content JSON content string
+ * @returns JSON File object
+ */
+const createJsonFile = async (content: object): Promise<File> => {
+  try {
+    const jsonString = JSON.stringify(content, null, 2);
+    const blob = new Blob([jsonString], { type: "application/json" });
+    const file = new File([blob], "agent.json", {
+      type: "application/json",
+      lastModified: Date.now(),
+    });
+
+    return file;
+  } catch (error) {
+    console.error("Create json file error:", error);
+    throw error;
+  }
+};
+
 const uploadFolderToIPFS = async (dirFileList: File[]) => {
   const list: IFile[] = [];
   const folderName = `agent_${Date.now()}`;
@@ -264,20 +291,18 @@ const uploadFolderToIPFS = async (dirFileList: File[]) => {
 
   const source = await Promise.all(sourcePromises);
 
-
   for await (const entry of importer(source, ipfsUnixfsImporterBlock, {
     cidVersion: 0,
     onlyHash: true,
     wrapWithDirectory: true,
   })) {
-   
     const data = {
       filename: entry.path || "",
       contenthash: entry.cid.toString(),
       filesize: entry.size,
       timestamp: Date.now(),
     };
-    
+
     list.push(data);
   }
 
@@ -303,52 +328,85 @@ interface IUploadData {
   avatar: File;
   functionDesc: string;
   behaviorDesc: string;
+  dataset: string;
+  blogPrompt: string;
+  blog_dataset: string;
+  hasBlog: boolean;
+  hasRAG: boolean;
   did: string;
 }
 
-/**
- * Upload content to IPFS
- * @param content Content to upload
- * @param onProgress Progress callback
- * @returns IPFS hash
- */
-export const uploadToIPFSByContract = async (
-  formData: IUploadData,
-  onProgress?: (percent: number) => void
-): Promise<{ htmlHash: string; avatarHash: string }> => {
+export const createContractRecord = async (
+  formData: IUploadData
+): Promise<{
+  txHash: string;
+  fileList: File[];
+  ipfsInfo: {
+    avatarHash: string;
+    contentHash: string;
+    agentId: string;
+  };
+}> => {
   try {
     const provider = await getProvider(true);
     const signer = provider.getSigner();
     const network = await provider.getNetwork();
+
+    if (network.chainId !== ENetwork.Ethereum) {
+      const { status } = await switchNetworkMetaMask(ENetwork.Ethereum);
+      if (!status) {
+        throw new Error("Failed to switch network");
+      }
+    }
+
     const contractAddress = networks.find(
-      (item: INetwork) => item.value === network.chainId
+      (item: INetwork) => item.value === ENetwork.Ethereum
     )?.contractAddr;
+
     if (!contractAddress) throw new Error("Contract address not found");
+
     const contract = new ethers.Contract(contractAddress, UPLOAD_ABI, signer);
 
     const avatarCid = await createAvatarCid(formData.avatar);
-   
-
-    const htmlContent = generateHTML({
+    const agentId = nanoid();
+    const { htmlString } = generateHTML({
       name: formData.name,
       avatar: avatarCid[0].cid,
       functionDesc: formData.functionDesc,
       behaviorDesc: formData.behaviorDesc,
       did: formData.did,
+      dataset: formData.dataset,
+      blogPrompt: formData.blogPrompt,
+      hasBlog: formData.hasBlog,
+      hasRAG: formData.hasRAG,
+      agentId: agentId,
     });
 
-    const htmlFile = await createHtmlFile(htmlContent);
-   
-    const fileList = [htmlFile, formData.avatar];
-    const dirFileList = await createFolderWithFiles(fileList);
-    
+    const JSON_DATA = {
+      version: 1,
+      agent_type: formData.hasBlog ? 2 : 1,
+      agent_id: agentId,
+      agent_name: formData.name,
+      agent_avatar: avatarCid[0].cid,
+      agent_intro: formData.functionDesc,
+      did: formData.did,
+      detail: {
+        chat_prompt: formData.behaviorDesc,
+        chat_dataset: formData.dataset,
+        blog_prompt: formData.blogPrompt,
+        blog_dataset: formData.blog_dataset,
+      },
+    };
+
+    const htmlFile = await createHtmlFile(htmlString);
+    const jsonFile = await createJsonFile(JSON_DATA);
+    const fileList = [htmlFile, formData.avatar, jsonFile];
     const ipfsHashCids = await uploadFolderToIPFS(fileList);
 
-   
     const findCid = ipfsHashCids.find(
       (item: IFile) => !item.filename.includes("/")
     );
-    
+
     const data: IRecordDataParam = {
       contenthash: findCid ? findCid.contenthash : "",
       timestamp: Date.now(),
@@ -356,12 +414,11 @@ export const uploadToIPFSByContract = async (
       agent_intro: formData.functionDesc,
       ensName: formData.did,
       avatarContentHash: avatarCid[0].cid,
-      extension: "{}",
+      extension: JSON.stringify({ agentId }),
       optionalField: "{}",
     };
-    const price = await contract.priceEth();
-  
 
+    const price = await contract.priceEth();
     const tx = await contract.recordData(
       data.contenthash,
       data.timestamp,
@@ -373,23 +430,53 @@ export const uploadToIPFSByContract = async (
       data.optionalField,
       {
         value: price,
-        gasLimit: 500000,
+        gasLimit: 900000,
       }
     );
 
     const receipt = await tx.wait();
-    const glitterHash = await uploadToGlitter(
-      dirFileList,
-      receipt.transactionHash,
-      network.chainId.toString(),
-      onProgress
-    );
     return {
-      htmlHash: glitterHash.Hash,
-      avatarHash: avatarCid[0].cid,
+      txHash: receipt.transactionHash,
+      fileList,
+      ipfsInfo: {
+        avatarHash: avatarCid[0].cid,
+        contentHash: findCid ? findCid.contenthash : "",
+        agentId,
+      },
     };
   } catch (error: any) {
-    console.error("Contract error:", error);
+    console.error("Contract step error:", error);
+    throw error;
+  }
+};
+
+// step 2: upload to IPFS
+export const uploadToIPFS = async (
+  stepData: StepData,
+  onProgress?: (percent: number) => void
+): Promise<{ contentHash: string; avatarHash: string }> => {
+  try {
+    const { contractData, ipfsData, fileList } = stepData;
+    if (!fileList) throw new Error("fileList not found");
+    const dirFileList = await createFolderWithFiles(fileList);
+
+    if (!contractData?.txHash || !ipfsData?.avatarHash)
+      throw new Error("txHash not found");
+
+    // upload to Glitter
+    const glitterHash = await uploadToGlitter(
+      dirFileList,
+      contractData.txHash,
+      "1", // Ethereum mainnet
+      onProgress
+    );
+
+    return {
+      contentHash: glitterHash.Hash,
+      avatarHash: ipfsData?.avatarHash,
+    };
+  } catch (error: any) {
+    console.error("IPFS step error:", error);
     throw error;
   }
 };
@@ -399,19 +486,28 @@ export const uploadToIPFSByContract = async (
  * @param data Agent data
  * @returns Generated HTML string
  */
-export const generateHTML = (data: IAgentData) => {
+const generateHTML = (data: IAgentData) => {
   const avatarUrl =
     typeof data.avatar === "string" && data.avatar
       ? data.avatar.startsWith("http")
         ? data.avatar
         : `https://ipfs.glitterprotocol.dev/ipfs/${data.avatar}`
       : "";
+  const metaData = {
+    name: data.name,
+    functionDesc: data.functionDesc,
+    behaviorDesc: data.behaviorDesc,
+    did: data.did,
+    id: Date.now(),
+    dataset: data.dataset,
+    blogPrompt: data.blogPrompt,
+    hasBlog: data.hasBlog,
+    hasRAG: data.hasRAG,
+    avatar: avatarUrl,
+    agentId: data.agentId,
+  };
 
-  const TEST_API_KEY = decryptApiKey(
-    "JTE0JTA3RCUxQiUwNkglMDQlMUMlNURCWSU0MFZSWlUlMDJZWCU0MCUxMiUwM0clMUFJRiU1Qk0lMEIlMDUlMDlYJTAyWlpMRVdGJTE0JTE1QiU1REMlMEUlMDFYJTBEVVElMEElNUQlMTBFJTAxJTQwJTFGJTE0"
-  );
-
-  return `
+  const htmlString = `
 <!DOCTYPE html>
 <html>
 <head>
@@ -421,19 +517,7 @@ export const generateHTML = (data: IAgentData) => {
   <meta charset="UTF-8">
   <meta name="description" content="${data.functionDesc}">
   <script>
-    window.aiData = ${JSON.stringify(
-      {
-        name: data.name,
-        functionDesc: data.functionDesc,
-        behaviorDesc: data.behaviorDesc,
-        did: data.did,
-        id: Date.now(),
-        avatar: avatarUrl,
-        apiKey: TEST_API_KEY,
-      },
-      null,
-      2
-    )};
+    window.aiData = ${JSON.stringify(metaData, null, 2)};
   </script>
   <script type="module" crossorigin src="https://aipfs.glitterprotocol.tech/agent/agent.js"></script>
   <link rel="stylesheet" crossorigin href="https://aipfs.glitterprotocol.tech/agent/agent.css">
@@ -443,6 +527,10 @@ export const generateHTML = (data: IAgentData) => {
 </body>
 </html>
   `.trim();
+  return {
+    htmlString,
+    metaData,
+  };
 };
 
 const createFolderWithFiles = async (fileList: File[]): Promise<File[]> => {

@@ -1,13 +1,13 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import path from "path";
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import path from 'path'
 
 export default defineConfig({
-  base: "./",
+  base: './',
   plugins: [react()],
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      '@': path.resolve(__dirname, './src'),
     },
   },
   css: {
@@ -18,24 +18,24 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: "dist/agent",
+    outDir: 'dist/agent',
     emptyOutDir: true,
-    assetsDir: ".",
+    assetsDir: '.',
     assetsInlineLimit: 4096000,
     rollupOptions: {
       input: {
-        agent: path.resolve(__dirname, "AIAgent.html"),
+        agent: path.resolve(__dirname, 'AIAgent.html'),
       },
       output: {
-        entryFileNames: "[name].js",
-        chunkFileNames: "[name].js",
+        entryFileNames: '[name].js',
+        chunkFileNames: '[name].js',
         assetFileNames: (assetInfo) => {
-          if (assetInfo.name?.endsWith(".css")) {
-            return "agent.css";
+          if (assetInfo.name?.endsWith('.css')) {
+            return 'agent.css'
           }
-          return "[name][extname]";
+          return '[name][extname]'
         },
       },
     },
   },
-});
+})

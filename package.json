@@ -1,7 +1,7 @@
 {
   "name": "AIWS",
   "private": true,
-  "version": "0.0.1",
+  "version": "1.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -16,12 +16,16 @@
     "@ant-design/x": "^1.0.4",
     "@ensdomains/content-hash": "^3.0.0",
     "@ensdomains/ensjs": "^4.0.2",
+    "@ipld/dag-json": "^10.2.3",
+    "@multiformats/blake2": "^2.0.2",
     "@wagmi/core": "1.4.13",
     "antd": "^5.22.7",
     "antd-style": "^3.7.1",
     "axios": "^0.27.2",
     "ethers": "^5.7.2",
     "ipfs-unixfs-importer": "^7.0.1",
+    "multiformats": "^13.3.1",
+    "nanoid": "^5.0.9",
     "openai": "^4.77.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -44,6 +48,7 @@
     "less": "^4.2.1",
     "typescript": "~5.6.2",
     "typescript-eslint": "^8.18.2",
+    "uuid": "^11.0.5",
     "vite": "^6.0.5"
   }
 }

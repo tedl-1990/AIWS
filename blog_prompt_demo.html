@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blog Prompt Demo</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .container {
+            padding: 20px;
+        }
+
+        h1 {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        h2 {
+            margin-top: 20px;
+        }
+
+        .section {
+            margin-bottom: 20px;
+        }
+
+        .instructions {
+            padding-left: 20px;
+        }
+
+
+        .copy-button {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background-color: #00dc96;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 12px 24px;
+            font-size: 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 2px 8px rgba(0, 220, 150, 0.2);
+            transition: all 0.3s ease;
+        }
+
+        .copy-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 220, 150, 0.3);
+        }
+
+        .copy-button:active {
+            transform: translateY(0);
+        }
+
+        .copy-button svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        .copy-success {
+            background-color: #52c41a;
+        }
+
+        @keyframes fadeOut {
+            from {
+                opacity: 1;
+            }
+
+            to {
+                opacity: 0;
+            }
+        }
+
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background-color: #52c41a;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 4px;
+            display: none;
+            animation: fadeOut 0.3s ease 1.5s forwards;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Blog Prompt</h1>
+
+        <div class="section">
+            <p>You are an intelligent Agent specializing in Web3 knowledge and community insights. Your primary role is
+                to generate daily blog posts summarizing key Web3 news and trends.</p>
+
+            <p>Below is the relevant information retrieved from the [Dataset Name] dataset. Use this information as the
+                main context for generating your blog post. If the retrieved content is insufficient or irrelevant, rely
+                on your internal knowledge base to ensure completeness.</p>
+        </div>
+
+        <div class="section">
+            <h2>Blog Context</h2>
+            <ul>
+                <li>Language: Ensure that the blog title and content are written in English.</li>
+                <li>Dataset: [Dataset Name].</li>
+                <li>Topic: Web3 news.</li>
+                <li>Content Focus: Summarize the retrieved information into a concise, engaging blog
+                    post.
+                    Highlight key news, trends, and updates from the Web3 ecosystem.</li>
+            </ul>
+        </div>
+
+        <div class="section">
+            <h2>Instructions</h2>
+            <ol class="instructions">
+                <li>Automatically generate a daily blog post summarizing Web3 news and highlights from the retrieved
+                    dataset.</li>
+                <li>Ensure the blog title and content are written in clear and professional English.</li>
+                <li>Include a brief introduction, key news highlights, and a concluding statement that encourages
+                    readers
+                    to stay updated on Web3 developments.</li>
+            </ol>
+        </div>
+
+        <div class="section">
+            <h2>Blog Title Format</h2>
+            <p>"Today's Web3 News - [Month Day, Year]"</p>
+            <p>Example: "Today's Web3 News - January 13, 2025"</p>
+            <p>Ensure the date always follows the format: [Month Day, Year].</p>
+        </div>
+
+        <div class="section">
+            <h2>Example Blog Structure</h2>
+            <ul>
+                <li>Introduction: A brief overview of today's Web3 news.</li>
+                <li>Key News Highlights: Summarize retrieved information into 2-3 key points.</li>
+                <li>Conclusion: A closing remark encouraging readers to stay informed about Web3 and
+                    its
+                    developments.</li>
+            </ul>
+        </div>
+    </div>
+
+    <button class="copy-button" onclick="copyContent()">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+        </svg>
+        Copy Prompt
+    </button>
+
+    <div class="toast">Copied successfully!</div>
+
+    <script>
+        async function copyContent() {
+            try {
+                const content = `You are an intelligent Agent specializing in Web3 knowledge and community insights. 
+Your primary role is to generate daily blog posts summarizing key Web3 news and trends.
+
+Below is the relevant information retrieved from the [Dataset Name] dataset. Use this information as the main context for generating your blog post. If the retrieved content is insufficient or irrelevant, rely on your internal knowledge base to ensure completeness.
+
+**Blog Context:**  
+- **Language:** Ensure that the blog title and content are written in English.
+- **Dataset:** [Dataset Name].
+- **Topic:** Web3 news.
+- **Content Focus:** Summarize the retrieved information into a concise, engaging blog post. Highlight key news, trends, and updates from the Web3 ecosystem.
+
+**Instructions:**  
+1. Automatically generate a daily blog post summarizing Web3 news and highlights from the retrieved dataset.
+2. Ensure the blog title and content are written in clear and professional English.
+3. Include a brief introduction, key news highlights, and a concluding statement that encourages readers to stay updated on Web3 developments.
+
+**Blog Title Format:**  
+"Today’s Web3 News - [Month Day, Year]"  
+- Example: "Today’s Web3 News - January 13, 2025"
+- Ensure the date always follows the format: [Month Day, Year].
+
+**Example Blog Structure:**  
+- **Introduction:** A brief overview of today’s Web3 news.  
+- **Key News Highlights:** Summarize retrieved information into 2-3 key points.  
+- **Conclusion:** A closing remark encouraging readers to stay informed about Web3 and its developments.
+                `;
+                await navigator.clipboard.writeText(content);
+
+                const toast = document.querySelector('.toast');
+                toast.style.display = 'block';
+
+                const button = document.querySelector('.copy-button');
+                button.classList.add('copy-success');
+                button.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                    Copied!
+                `;
+
+                setTimeout(() => {
+                    button.classList.remove('copy-success');
+                    button.innerHTML = `
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                        </svg>
+                        Copy Prompt
+                    `;
+                    toast.style.display = 'none';
+                }, 2000);
+            } catch (err) {
+                console.error('Failed to copy:', err);
+                alert('Failed to copy content. Please try again.');
+            }
+        }
+    </script>
+</body>
+
+</html>

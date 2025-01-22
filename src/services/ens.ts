@@ -35,7 +35,7 @@ export const setEnsRecord = async (ensName: string, ipfsHash: string) => {
     // Check and switch network
     const network = await provider.getNetwork();
     if (network.chainId !== MAINNET_CHAIN_ID) {
-      await switchNetworkMetaMask(MAINNET_CHAIN_ID, provider);
+      await switchNetworkMetaMask(MAINNET_CHAIN_ID);
     }
 
     await provider.send("eth_requestAccounts", []);
@@ -180,3 +180,52 @@ export async function getAllOwnedENSDomains(
     return [];
   }
 }
+
+/**
+ * Get ENS social accounts for a given ENS name
+ * @param ensName ENS name
+ * @returns Object containing social accounts
+ */
+export const getEnsSocialAccounts = async (ensName: string) => {
+  
+  try {
+    console.log(ensName, "ensName");
+    if (!ensName) {
+      return {
+        twitter: "",
+        telegram: "",
+        github: "",
+      };
+    }
+    const client = await createSharedEnsClient();
+
+    // Get text records for social accounts
+    const twitter = await client.getTextRecord({
+      name: ensName,
+      key: "com.twitter",
+    });
+
+    const telegram = await client.getTextRecord({
+      name: ensName,
+      key: "org.telegram",
+    });
+
+    const github = await client.getTextRecord({
+      name: ensName,
+      key: "com.github",
+    });
+
+    return {
+      twitter: twitter || "",
+      telegram: telegram || "",
+      github: github || "",
+    };
+  } catch (error) {
+    console.error("Failed to get ENS social accounts:", error);
+    return {
+      twitter: "",
+      telegram: "",
+      github: "",
+    };
+  }
+};

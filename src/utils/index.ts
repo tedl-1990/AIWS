@@ -1,4 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { CID } from 'multiformats/cid'
+import { sha256 } from 'multiformats/hashes/sha2'
+
 /**
  * Encrypt API key using XOR cipher
  * @param apiKey Original API key to encrypt
@@ -6,18 +9,18 @@
  */
 export const encryptApiKey = (apiKey: string): string => {
   try {
-    const key = "glitter-protocol";
-    let result = "";
+    const key = 'glitter-protocol'
+    let result = ''
     for (let i = 0; i < apiKey.length; i++) {
-      const charCode = apiKey.charCodeAt(i) ^ key.charCodeAt(i % key.length);
-      result += String.fromCharCode(charCode);
+      const charCode = apiKey.charCodeAt(i) ^ key.charCodeAt(i % key.length)
+      result += String.fromCharCode(charCode)
     }
-    return btoa(encodeURIComponent(result));
+    return btoa(encodeURIComponent(result))
   } catch (error) {
-    console.error("Encryption error:", error);
-    return apiKey;
+    console.error('Encryption error:', error)
+    return apiKey
   }
-};
+}
 
 /**
  * Decrypt encrypted API key
@@ -25,46 +28,61 @@ export const encryptApiKey = (apiKey: string): string => {
  * @returns Original decrypted API key
  */
 export const decryptApiKey = (encryptedKey: string): string => {
-  if (!encryptedKey) return "";
+  if (!encryptedKey) return ''
 
   try {
     if (!/^[A-Za-z0-9+/]*={0,2}$/.test(encryptedKey)) {
-      throw new Error("Invalid Base64 format");
+      throw new Error('Invalid Base64 format')
     }
 
-    const decoded = atob(encryptedKey);
-    const decodedStr = decodeURIComponent(decoded);
-    const key = "glitter-protocol";
-    let result = "";
+    const decoded = atob(encryptedKey)
+    const decodedStr = decodeURIComponent(decoded)
+    const key = 'glitter-protocol'
+    let result = ''
 
     for (let i = 0; i < decodedStr.length; i++) {
-      const charCode =
-        decodedStr.charCodeAt(i) ^ key.charCodeAt(i % key.length);
-      result += String.fromCharCode(charCode);
+      const charCode = decodedStr.charCodeAt(i) ^ key.charCodeAt(i % key.length)
+      result += String.fromCharCode(charCode)
     }
 
-    return result;
+    return result
   } catch (error) {
-    console.error("Decryption error:", error);
-    return "";
+    console.error('Decryption error:', error)
+    return ''
   }
-};
+}
 
 interface IReadFileReturn {
-  path: string;
-  content: any;
+  path: string
+  content: any
 }
 
 export const readFileAsUint8Array = (file: any): Promise<IReadFileReturn> =>
   new Promise((resolve) => {
-    const reader = new FileReader();
+    const reader = new FileReader()
     reader.onload = async (e: any) => {
-      const arrayBuffer = e.target.result;
-      const uint8Array = new Uint8Array(arrayBuffer);
+      const arrayBuffer = e.target.result
+      const uint8Array = new Uint8Array(arrayBuffer)
       resolve({
         path: file.webkitRelativePath,
         content: uint8Array,
-      });
-    };
-    reader.readAsArrayBuffer(file);
-  });
+      })
+    }
+    reader.readAsArrayBuffer(file)
+  })
+
+export const generateChatCID = async (message: string): Promise<string> => {
+  try {
+    const encoder = new TextEncoder()
+    const bytes = encoder.encode(message)
+
+    const hash = await sha256.digest(bytes)
+
+    const cid = CID.createV0(hash)
+
+    return cid.toString()
+  } catch (error) {
+    console.error('Error generating CID:', error)
+    throw new Error('Failed to generate CID')
+  }
+}

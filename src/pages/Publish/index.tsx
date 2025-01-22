@@ -14,27 +14,20 @@ import {
   message,
   Select,
   Spin,
+  Steps,
+  Checkbox,
+  CheckboxChangeEvent,
 } from "antd";
 import { UploadOutlined } from "@ant-design/icons";
 import type { RcFile } from "antd/es/upload/interface";
 import { ethers } from "ethers";
 import "./index.less";
-import { uploadToIPFSByContract } from "@/services/upload";
+import { createContractRecord, uploadToIPFS } from "@/services/upload";
 import { setEnsRecord, getAllOwnedENSDomains } from "@/services/ens";
 import { ENetwork } from "@/services/network";
 import { useAccount } from "wagmi";
-
+import { PublishStep, StepData, FormValues } from "@/types";
 const { TextArea } = Input;
-
-/**
- * Form values interface for agent creation
- */
-interface FormValues {
-  name: string;
-  functionDesc: string;
-  behaviorDesc: string;
-  did: string;
-}
 
 /**
  * Props interface for Publish component
@@ -43,14 +36,22 @@ interface PublishProps {
   onSuccess: () => void;
 }
 
+// Define step messages
 const STEPS = {
   PREPARING: "Preparing files...",
-  UPLOADING_AVATAR: "Uploading avatar...",
   CREATING_AGENT: "Creating Agent...",
   UPLOADING_FILES: "Uploading files...",
-  CONFIRMING: "Confirming transaction...",
+  CONFIRMING: "Binding ENS...",
   COMPLETED: "Completed!",
 };
+
+const enum EDataset {
+  INDEX3 = "Index3",
+  FARCASTER = "Farcaster",
+  LIBER3 = "Liber3",
+  CHAINFEEDS = "ChainFeeds",
+  DAILYFEEDS = "DailyFeeds",
+}
 
 /**
  * Publish component for creating new AI agents
@@ -58,13 +59,24 @@ const STEPS = {
 const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
   // Form and state management
   const [form] = Form.useForm<FormValues>();
+  const chatConfigValue = Form.useWatch("chatConfig", form);
+  const blogConfigValue = Form.useWatch("blogConfig", form);
   const [avatarFile, setAvatarFile] = useState<RcFile>();
   const [submitting, setSubmitting] = React.useState(false);
-  const [currentStep, setCurrentStep] = useState("");
+  const [currentStep, setCurrentStep] = useState<PublishStep>(
+    PublishStep.CONTRACT
+  );
+  const [stepMessage, setStepMessage] = useState("");
   const { address } = useAccount();
   const [ensDomains, setEnsDomains] = React.useState<string[]>([]);
   const [loadingDomains, setLoadingDomains] = React.useState(false);
   const [imageUrl, setImageUrl] = useState<string>();
+  const [stepData, setStepData] = useState<StepData>({
+    step: PublishStep.CONTRACT,
+  });
+  const [errorStep, setErrorStep] = useState<PublishStep | null>(null);
+
+  const isFormDisabled = currentStep !== PublishStep.CONTRACT;
 
   /**
    * Validate and upload avatar before adding to form
@@ -84,13 +96,28 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
 
     setAvatarFile(file);
     getBase64(file, setImageUrl);
-    return false; 
+    return false;
   };
 
-  const onFinish = async (values: FormValues) => {
+  const getErrorMessage = (step: PublishStep) => {
+    switch (step) {
+      case PublishStep.CONTRACT:
+        return "Contract creation failed. Please try this step again.";
+      case PublishStep.IPFS:
+        return "IPFS upload failed. Please try this step again.";
+      case PublishStep.ENS:
+        return "ENS record update failed. Please try this step again.";
+      default:
+        return "An error occurred. Please try again.";
+    }
+  };
+
+  // Handle contract step
+  const handleContractStep = async (values: FormValues) => {
     try {
+      setErrorStep(null);
       setSubmitting(true);
-      setCurrentStep(STEPS.PREPARING);
+      setStepMessage(STEPS.PREPARING);
 
       if (!avatarFile) {
         message.error("Please upload an avatar!");
@@ -103,19 +130,103 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
         functionDesc: values.functionDesc,
         behaviorDesc: values.behaviorDesc,
         did: values.did,
+        dataset: values.dataset,
+        blog_dataset: values.blog_dataset,
+        blogPrompt: values.blogPrompt,
+        hasBlog: values.blogPrompt ? true : false,
+        hasRAG: values.chatConfig,
       };
 
-      setCurrentStep(STEPS.CREATING_AGENT);
-      const { htmlHash } = await uploadToIPFSByContract(data);
+      setStepMessage(STEPS.CREATING_AGENT);
+      const { txHash, ipfsInfo, fileList } = await createContractRecord(data);
 
-      setCurrentStep(STEPS.UPLOADING_FILES);
-      // Set ENS records if DID is an ENS domain
+      // Save data
+      const newStepData = {
+        step: PublishStep.IPFS,
+        formData: values,
+        fileList,
+        contractData: {
+          txHash,
+        },
+        ipfsData: {
+          ...ipfsInfo,
+          ipfsUploaded: false,
+        },
+      };
+      setStepData(newStepData);
+
+      // Go to next step
+      updateStep(PublishStep.IPFS, newStepData);
+    } catch (error) {
+      console.error("Contract step failed:", error);
+      message.error("Contract step failed");
+      setErrorStep(PublishStep.CONTRACT);
+      setSubmitting(false);
+      setStepMessage("");
+    }
+  };
+
+  const handleIpfsStep = async (stepData: StepData) => {
+    try {
+      setErrorStep(null);
+      setSubmitting(true);
+      setStepMessage(STEPS.UPLOADING_FILES);
+
+      const { formData, contractData, ipfsData } = stepData;
+      if (!formData || !contractData || !ipfsData) {
+        throw new Error("Missing required data");
+      }
+
+      if (!avatarFile) {
+        throw new Error("Avatar file not found");
+      }
+
+      const result = await uploadToIPFS(stepData, (percent: any) => {
+        setStepMessage(`Uploading... ${percent}%`);
+      });
+
+      if (!result || !result.contentHash) {
+        throw new Error("Upload failed");
+      }
+
+      const newStepData = {
+        ...stepData,
+        ipfsData: {
+          ...ipfsData,
+          contentHash: result.contentHash,
+          ipfsUploaded: true,
+        },
+      };
+
+      setStepData(newStepData);
+      updateStep(PublishStep.ENS, newStepData);
+    } catch (error) {
+      console.error("IPFS step failed:", error);
+      message.error("IPFS upload failed");
+      setErrorStep(PublishStep.IPFS);
+      setSubmitting(false);
+      setStepMessage("");
+    }
+  };
+
+  const handleEnsStep = async (stepData: StepData) => {
+    try {
+      setErrorStep(null);
+      setSubmitting(true);
+      setStepMessage(STEPS.CONFIRMING);
+
+      const { formData, ipfsData } = stepData;
+      if (!formData || !ipfsData || !ipfsData.ipfsUploaded) {
+        throw new Error("Missing required data");
+      }
+
+      // Set ENS records
       try {
         const chainId = ethers.BigNumber.from(
           window.ethereum?.chainId
         ).toNumber();
         if (chainId === ENetwork.Ethereum) {
-          await setEnsRecord(values.did, htmlHash);
+          await setEnsRecord(formData.did, ipfsData.contentHash);
           message.success("ENS records updated successfully");
         }
       } catch (error: any) {
@@ -125,22 +236,42 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
         } else {
           message.error("Failed to update ENS records");
         }
-        // Return early if ENS binding fails
         return;
       }
+
+      updateStep(PublishStep.COMPLETED);
+      setStepMessage(STEPS.COMPLETED);
 
       onSuccess();
       message.success("Agent created successfully");
       form.resetFields();
       setAvatarFile(undefined);
       setImageUrl(undefined);
-      setCurrentStep("");
+      setStepData({ step: PublishStep.CONTRACT });
+      setCurrentStep(PublishStep.CONTRACT);
     } catch (error) {
-      console.error("Error creating agent:", error);
-      message.error("Failed to create agent");
-      setCurrentStep("");
+      console.error("ENS step failed:", error);
+      message.error("ENS update failed");
+      setErrorStep(PublishStep.ENS);
     } finally {
       setSubmitting(false);
+      setStepMessage("");
+    }
+  };
+
+  const onFinish = async (values: FormValues) => {
+    switch (currentStep) {
+      case PublishStep.CONTRACT:
+        await handleContractStep(values);
+        break;
+      case PublishStep.IPFS:
+        await handleIpfsStep(stepData);
+        break;
+      case PublishStep.ENS:
+        await handleEnsStep(stepData);
+        break;
+      default:
+        break;
     }
   };
 
@@ -173,6 +304,9 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
     setAvatarFile(undefined);
     setImageUrl(undefined);
     setLoadingDomains(false);
+    setStepData({ step: PublishStep.CONTRACT });
+    setCurrentStep(PublishStep.CONTRACT);
+    setStepMessage("");
   };
 
   const uploadButton = (
@@ -188,14 +322,89 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
     reader.readAsDataURL(img);
   };
 
+  // Execute step logic
+  const executeStep = async (step: PublishStep, stepData: StepData) => {
+    switch (step) {
+      case PublishStep.CONTRACT:
+        await form.validateFields();
+        await handleContractStep(form.getFieldsValue());
+        break;
+      case PublishStep.IPFS:
+        await handleIpfsStep(stepData);
+        break;
+      case PublishStep.ENS:
+        await handleEnsStep(stepData);
+        break;
+      default:
+        break;
+    }
+  };
+
+  // Update current step
+  const updateStep = (newStep: PublishStep, stepData?: StepData) => {
+    setCurrentStep(newStep);
+    if (newStep !== PublishStep.COMPLETED && stepData) {
+      executeStep(newStep, stepData);
+    }
+  };
+
+  const handleChatConfigChange = (e: CheckboxChangeEvent) => {
+    if (e.target.checked) {
+      form.setFieldsValue({
+        chatConfig: true,
+        dataset: undefined,
+        blog_dataset: undefined,
+      });
+    } else {
+      form.setFieldsValue({
+        chatConfig: false,
+        dataset: undefined,
+        blog_dataset: undefined,
+      });
+    }
+  };
+
+  const handleBlogConfigChange = (e: CheckboxChangeEvent) => {
+    if (e.target.checked) {
+      form.setFieldsValue({
+        blogConfig: true,
+        blogPrompt: undefined,
+      });
+    } else {
+      form.setFieldsValue({
+        blogConfig: false,
+        blogPrompt: undefined,
+        blog_dataset: undefined,
+      });
+    }
+  };
+
+  const initialValues = {
+    chatConfig: false,
+    blogConfig: false,
+    dataset: undefined,
+    blogPrompt: undefined,
+  };
+
   return (
     <div className="publish-container">
+      <Steps
+        current={Object.values(PublishStep).indexOf(currentStep)}
+        items={[
+          { title: "Generate Agent" },
+          { title: "Upload IPFS" },
+          { title: "Bind ENS" },
+        ]}
+        style={{ marginBottom: 24 }}
+      />
+
       <Form<FormValues>
         form={form}
         layout="vertical"
         onFinish={onFinish}
-        requiredMark="optional"
+        requiredMark={false}
         onReset={handleReset}
+        initialValues={initialValues}
       >
         <Form.Item
           label="Agent Name"
@@ -206,6 +415,7 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
           ]}
         >
           <Input
+            disabled={isFormDisabled}
             autoComplete="off"
             placeholder="Enter Agent Name"
             maxLength={50}
@@ -219,6 +429,7 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
           rules={[{ required: true, message: "Please upload avatar!" }]}
         >
           <Upload
+            disabled={isFormDisabled}
             listType="picture-card"
             showUploadList={false}
             beforeUpload={beforeUpload}
@@ -240,6 +451,7 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
           ]}
         >
           <TextArea
+            disabled={isFormDisabled}
             placeholder="Provide a brief introduction for the AI agent here"
             autoSize={{ minRows: 3, maxRows: 6 }}
             maxLength={150}
@@ -247,18 +459,143 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
           />
         </Form.Item>
 
+        {/* <Form.Item label="Chat Configuration" name="chatConfig">
+          <Checkbox onChange={handleChatConfigChange}>Chat with RAG</Checkbox>
+          <p className="config-desc">
+            Enhance chat responses by retrieving and integrating external data
+            from selected datasets.
+          </p>
+        </Form.Item> */}
+
+        {chatConfigValue && (
+          <Form.Item
+            label="Dataset"
+            name="dataset"
+            rules={[
+              {
+                required: chatConfigValue,
+                message: "Please select a dataset!",
+              },
+            ]}
+          >
+            <Select placeholder="Please select a dataset">
+              <Select.Option value={EDataset.INDEX3}>
+                {EDataset.INDEX3}
+              </Select.Option>
+              <Select.Option value={EDataset.FARCASTER}>
+                {EDataset.FARCASTER}
+              </Select.Option>
+              <Select.Option value={EDataset.LIBER3}>
+                {EDataset.LIBER3}
+              </Select.Option>
+              <Select.Option value={EDataset.CHAINFEEDS}>
+                {EDataset.CHAINFEEDS}
+              </Select.Option>
+              <Select.Option value={EDataset.DAILYFEEDS}>
+                {EDataset.DAILYFEEDS}
+              </Select.Option>
+            </Select>
+          </Form.Item>
+        )}
+
         <Form.Item
-          label="Agent Description Prompt"
+          label={
+            <div className="prompt-label">
+              <span>Chat Prompt</span>{" "}
+              <a
+                target="_blank"
+                href="https://ipfs.glitterprotocol.dev/ipfs/QmUrFbx7FyVKXDu4QhvwTLwdTK5daeL7Pde5pdvmGx6zbw"
+              >
+                Prompt Template
+              </a>
+            </div>
+          }
           name="behaviorDesc"
           rules={[
             {
               required: true,
-              message: "Please input Agent Description Prompt!",
+              message: "Please input Chat Prompt!",
             },
           ]}
         >
           <TextArea
-            placeholder="Provide the personality traits or characteristics for the AI agent here"
+            disabled={isFormDisabled}
+            placeholder="Define how the Agent should interact with users during chats. Include the tone, knowledge focus, and expected behavior."
+            autoSize={{ minRows: 3, maxRows: 6 }}
+          />
+        </Form.Item>
+
+        {/* <Form.Item
+          label="Blog Configuration"
+          name="blogConfig"
+          rules={[
+            {
+              required: blogConfigValue,
+              message: "Please input Blog Prompt!",
+            },
+          ]}
+        >
+          <Checkbox onChange={handleBlogConfigChange}>Blog Generation</Checkbox>
+          <p className="config-desc">
+            Automatically generate blog summarizing key trends and highlights
+            from selected datasets.
+          </p>
+        </Form.Item> */}
+
+        {/* {blogConfigValue && (
+          <Form.Item
+            label="Blog Dataset"
+            name="blog_dataset"
+            rules={[
+              {
+                required: chatConfigValue,
+                message: "Please select a dataset!",
+              },
+            ]}
+          >
+            <Select placeholder="Please select a dataset">
+              <Select.Option value={EDataset.INDEX3}>
+                {EDataset.INDEX3}
+              </Select.Option>
+              <Select.Option value={EDataset.FARCASTER}>
+                {EDataset.FARCASTER}
+              </Select.Option>
+              <Select.Option value={EDataset.LIBER3}>
+                {EDataset.LIBER3}
+              </Select.Option>
+              <Select.Option value={EDataset.CHAINFEEDS}>
+                {EDataset.CHAINFEEDS}
+              </Select.Option>
+              <Select.Option value={EDataset.DAILYFEEDS}>
+                {EDataset.DAILYFEEDS}
+              </Select.Option>
+            </Select>
+          </Form.Item>
+        )} */}
+
+        <Form.Item
+          label={
+            <div className="prompt-label">
+              <span>Blog Prompt</span>{" "}
+              <a
+                target="_blank"
+                href="https://ipfs.glitterprotocol.dev/ipfs/QmYTTeazKPmw1JChBL2Xqr4B7bxDz8KMsxhLRwd8xd4iVr"
+              >
+                Prompt Template
+              </a>
+            </div>
+          }
+          name="blogPrompt"
+          rules={[
+            {
+              required: blogConfigValue,
+              message: "Please input Blog Prompt!",
+            },
+          ]}
+        >
+          <TextArea
+            disabled={isFormDisabled}
+            placeholder="Describe how the Agent should generate blog posts. Include the focus topics, writing style and target audience."
             autoSize={{ minRows: 3, maxRows: 6 }}
           />
         </Form.Item>
@@ -269,6 +606,7 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
           rules={[{ required: true, message: "Please select an ENS domain!" }]}
         >
           <Select
+            disabled={isFormDisabled || !address}
             placeholder={
               address ? "Select your ENS domain" : "Please connect wallet first"
             }
@@ -282,7 +620,6 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
                 "No ENS domains found for this address"
               ) : null
             }
-            disabled={!address}
             onDropdownVisibleChange={async (open) => {
               if (open && address) {
                 try {
@@ -308,9 +645,31 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
           </Select>
         </Form.Item>
 
+        {errorStep && (
+          <div
+            style={{
+              color: "#ff4d4f",
+              marginBottom: 16,
+              textAlign: "center",
+            }}
+          >
+            {getErrorMessage(errorStep)}
+          </div>
+        )}
+
         <Form.Item>
-          <Button type="primary" htmlType="submit" block loading={submitting}>
-            {submitting ? currentStep || "Creating..." : "Create"}
+          <Button
+            style={{ marginTop: 24 }}
+            type="primary"
+            htmlType="submit"
+            block
+            loading={submitting}
+          >
+            {submitting
+              ? stepMessage || "Creating..."
+              : errorStep
+              ? "Retry this step"
+              : "Create"}
           </Button>
         </Form.Item>
       </Form>

@@ -1,6 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import chainsMini from "@/const/chains_mini.json";
-import { ethers } from "ethers";
 
 export interface INetwork {
   label: string;
@@ -8,7 +7,7 @@ export interface INetwork {
   icon?: string;
   price: number;
   unit: string;
-  unitName: number; 
+  unitName: number;
   contractAddr: string;
 }
 
@@ -47,24 +46,30 @@ export const networks: INetwork[] = [
 ];
 
 export const switchNetworkMetaMask = async (
-  chainId: number,
-  sdk: ethers.providers.Provider
+  chainId: number
 ): Promise<{
   status: boolean;
   message?: string;
 }> => {
   const networkChainId = Number(chainId);
-
-  if (sdk) {
+  console.log(networkChainId, "networkChainId");
+  if (window.ethereum) {
     try {
-      const nowChainId = await sdk.getNetwork();
-
+      const nowChainId = await window.ethereum.request({
+        method: "eth_chainId",
+      });
+      console.log(nowChainId, "nowChainId");
+      console.log(
+        networkChainId !== Number(nowChainId),
+        "networkChainId !== Number(nowChainId)"
+      );
       if (networkChainId !== Number(nowChainId)) {
         const chainId = chainIdNumberToHex(networkChainId);
+        console.log(chainId, "chainId");
 
         await window.ethereum.request({
           method: "wallet_switchEthereumChain",
-          params: [{ chainId }],
+          params: [{ chainId: chainId }],
         });
         return {
           status: true,
@@ -82,7 +87,7 @@ export const switchNetworkMetaMask = async (
       // IN MetaMask Application:
       // -32603	Unrecognized chain ID. Try adding the chain using wallet_addEthereumChain first.
       if (error && errroCode.includes(error.code)) {
-        const res = await addNetworkMetaMask(networkChainId, sdk);
+        const res = await addNetworkMetaMask(networkChainId);
         return {
           status: res,
           message:
@@ -99,7 +104,6 @@ export const switchNetworkMetaMask = async (
           status: false,
           message: `Please connect to ${chainInfo?.name}, chainID: ${chainInfo?.chainId}`,
         };
-    
       }
     }
   } else {
@@ -114,10 +118,7 @@ export const chainIdNumberToHex = (chainId: number) => {
   return `0x${chainId.toString(16)}`;
 };
 
-export const addNetworkMetaMask = async (
-  chainId: number,
-  sdk: any
-): Promise<boolean> => {
+export const addNetworkMetaMask = async (chainId: number): Promise<boolean> => {
   const networkChainId = Number(chainId);
 
   let chainInfo: any = null;
@@ -141,7 +142,7 @@ export const addNetworkMetaMask = async (
             : null,
       };
       try {
-        await sdk.request({
+        await window.ethereum.request({
           method: "wallet_addEthereumChain",
           params: [params],
         });

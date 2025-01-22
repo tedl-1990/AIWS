@@ -2,8 +2,8 @@
  * AI Service Module
  */
 
-import OpenAI from "openai";
-import { decryptApiKey } from "@/utils";
+// import { getChatCompletionsStream } from "./api";
+import { getChatCompletions } from "./api";
 
 /**
  * Declare global window.aiData type
@@ -11,6 +11,7 @@ import { decryptApiKey } from "@/utils";
 declare global {
   interface Window {
     aiData: {
+      agentId: string; // AI ID
       name: string; // AI name
       functionDesc: string; // Function description
       behaviorDesc: string; // Behavior description
@@ -25,29 +26,6 @@ declare global {
 }
 
 /**
- * Decrypt and get API key
- */
-export const API_KEY = decryptApiKey(
-  "JTE0JTA3RCUxQiUwNkglMDQlMUMlNURCWSU0MFZSWlUlMDJZWCU0MCUxMiUwM0clMUFJRiU1Qk0lMEIlMDUlMDlYJTAyWlpMRVdGJTE0JTE1QiU1REMlMEUlMDFYJTBFUFklNUNCJTQwUSUxMSUxQiUxNUNaJTEwJTVDJTAwJTBEVVElMEElNUQlMTBFJTAxJTQwJTFGJTE0"
-);
-
-/**
- * Initialize OpenAI client
- */
-export const openai = new OpenAI({
-  baseURL: "https://openrouter.ai/api/v1", // OpenRouter API URL
-  apiKey: API_KEY,
-  dangerouslyAllowBrowser: true, // Allow usage in browser
-  defaultHeaders: {
-    accept: "application/json",
-    "content-type": "application/json",
-    authorization: `Bearer ${API_KEY}`,
-    "HTTP-Referer": window.location.origin,
-    "X-Title": "AIWS",
-  },
-});
-
-/**
  * Remove quotes from start and end of text
  */
 const removeQuotes = (text: string): string => {
@@ -59,18 +37,22 @@ const removeQuotes = (text: string): string => {
  * @param message User's message
  * @returns AI's response content
  */
-export const sendMessage = async (message: string) => {
+export const sendMessage = async (
+  message: string,
+  sessionId: string,
+  onProgress?: (text: string) => void,
+  onFinish?: (text: string) => void
+) => {
   try {
-    const apiKey = API_KEY;
-    if (!apiKey) {
-      throw new Error("No valid API key available");
+    if (message.length === 0) {
+      return;
     }
-
+    const agent_id =
+      window.aiData?.agentId || window.aiData?.id || "Vi2L02VaH8HZG5MmaUH9B";
     // Get current conversation history
     const history = conversationHistories[currentConversationId] || [];
     // Initialize new conversation
     if (history.length === 0 && window.aiData?.behaviorDesc) {
-      // Add system message with AI behavior description
       history.push({
         role: "system",
         content: window.aiData.behaviorDesc,
@@ -79,25 +61,30 @@ export const sendMessage = async (message: string) => {
 
     history.push({ role: "user", content: message });
 
-    // Call API to get response
-    const completion = await openai.chat.completions.create({
-      model: "openai/gpt-3.5-turbo",
-      messages: history,
-      temperature: 0.7,
-      max_tokens: 1000,
+    // Call API with stream option
+    const { messages } = await getChatCompletions({
+      input: {
+        agent_id: String(agent_id),
+        messages: [
+          {
+            content: message || "",
+          },
+        ],
+        thread_id: sessionId,
+      },
     });
-
-    const response = completion.choices?.[0]?.message?.content;
-    if (!response) {
-      throw new Error("Invalid response from AI");
-    }
+    const fullResponse = messages[0].content;
+    onProgress?.(fullResponse);
+    console.log(fullResponse, "fullResponse");
+    onFinish?.(fullResponse);
 
     // Remove quotes from response
-    const cleanResponse = removeQuotes(response);
-    history.push({ role: "assistant", content: cleanResponse });
+    const cleanResponse = removeQuotes(fullResponse);
 
     // Update conversation history
+    history.push({ role: "assistant", content: cleanResponse });
     conversationHistories[currentConversationId] = history;
+
     return cleanResponse;
   } catch (error) {
     console.error("Error sending message:", error);
@@ -105,7 +92,7 @@ export const sendMessage = async (message: string) => {
     const history = conversationHistories[currentConversationId] || [];
     history.push({ role: "assistant", content: errorMessage });
     conversationHistories[currentConversationId] = history;
-    return errorMessage;
+    throw error;
   }
 };
 

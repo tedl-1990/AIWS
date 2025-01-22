@@ -44,10 +44,21 @@ interface ConnectError extends Error {
  * @param address Wallet address
  * @returns Message and timestamp
  */
-const createMessage = (address: string) => {
+const createLoginMessage = (address: string) => {
   const timestamp = Math.floor(new Date().getTime() / 1000);
+  const msg = `
+Login on AIWS:
+
+This signature is used only for login and does not include any other fees.
+
+Wallet address:
+${address}
+
+Nonce:
+${timestamp}
+`;
   return {
-    msg: `Message:\n\nupload and deploy project\n\nWallet address:\n${address}\n\nNonce:\n${timestamp}\n`,
+    msg,
     timestamp,
   };
 };
@@ -59,6 +70,7 @@ const AgentList: React.FC = () => {
   // State management
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [tableLoading, setTableLoading] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [signing, setSigning] = useState(false);
   const [total, setTotal] = useState(0);
@@ -78,35 +90,47 @@ const AgentList: React.FC = () => {
   const { disconnect } = useDisconnect();
   const { signMessageAsync } = useSignMessage();
 
-  const fetchRecords = async (page: number, size: number): Promise<void> => {
+  const fetchRecords = async (): Promise<void> => {
     try {
-      setLoading(true);
-      const { total, records } = await getAllRecords(page, size);
-      const formattedAgents: IContractHistoryRow[] = records.map(
-        (record: IRecord, index: number) => ({
-          id: `${record.creator_address}-${index}`,
-          name: record.agent_name,
-          avatar: record.avatar,
-          timestamp: record.timestamp,
-          description: record.agent_intro,
-          did: record.did,
-          ipfsHash: record.contenthash,
-          address: record.creator_address,
-        })
+      setTableLoading(true);
+      const { records } = await getAllRecords();
+
+      const latestRecords = records.reduce(
+        (acc: { [key: string]: IRecord }, curr: IRecord) => {
+          if (curr.did) {
+            if (!acc[curr.did] || acc[curr.did].timestamp < curr.timestamp) {
+              acc[curr.did] = curr;
+            }
+          } else {
+            const key = `${curr.creator_address}-${curr.timestamp}`;
+            acc[key] = curr;
+          }
+          return acc;
+        },
+        {}
       );
-      setTotal(total);
+
+      const formattedAgents: IContractHistoryRow[] = Object.values(
+        latestRecords
+      ).map((record: IRecord, index: number) => ({
+        id: `${record.creator_address}-${index}`,
+        name: record.agent_name,
+        avatar: record.avatar,
+        timestamp: record.timestamp,
+        description: record.agent_intro,
+        did: record.did,
+        ipfsHash: record.contenthash,
+        address: record.creator_address,
+      }));
+      setTotal(formattedAgents.length);
       setAgents(formattedAgents);
     } catch (error) {
       console.error("Fetch records error:", error);
       message.error("Failed to load agents");
     } finally {
-      setLoading(false);
+      setTableLoading(false);
     }
   };
-
-  useEffect(() => {
-    fetchRecords(currentPage, pageSize);
-  }, [currentPage, pageSize]);
 
   const handleTableChange = (pagination: TablePaginationConfig) => {
     setCurrentPage(pagination.current || 1);
@@ -145,7 +169,7 @@ const AgentList: React.FC = () => {
       if (loading || signing) return;
       try {
         setLoading(true);
-        const { msg } = createMessage(address);
+        const { msg } = createLoginMessage(address);
         const signature = await signMessage(msg);
 
         if (!signature) return;
@@ -191,6 +215,9 @@ const AgentList: React.FC = () => {
       setConnecting(false);
     }
   };
+  useEffect(() => {
+    fetchRecords();
+  }, []);
 
   /**
    * Initialize login on component mount
@@ -228,7 +255,6 @@ const AgentList: React.FC = () => {
         if (isConnected && address && address !== storedAddress && mounted) {
           const token = await handleLogin(address);
           if (token) {
-            fetchRecords(currentPage, pageSize);
             message.success("Connected successfully");
           }
         }
@@ -279,7 +305,7 @@ const AgentList: React.FC = () => {
    * @param agent New agent data
    */
   const handleCreateAgent = () => {
-    fetchRecords(currentPage, pageSize).finally(() => {
+    fetchRecords().finally(() => {
       setDrawerOpen(false);
     });
   };
@@ -404,7 +430,7 @@ const AgentList: React.FC = () => {
         dataSource={agents}
         rowKey="id"
         className="agent-table"
-        loading={loading}
+        loading={tableLoading}
         pagination={{
           current: currentPage,
           pageSize,

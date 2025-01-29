@@ -48,7 +48,7 @@ Welcome to AIWS, a modular network for generating and managing DeAgents fully bu
 |                                             +--------------------------------+
 +------------------------------------------------------------------------------+
 |                                   Models                                     |
-|       🌞 OpenAI       🌀 Llama       🧠 Claude       ♾️ Gemini              |
+|       🐳 DeepSeek       🧠 Claude      🌞 OpenAI       🌀 Llama              |
 |                                                                              |
 +------------------------------------------------------------------------------+
 ```

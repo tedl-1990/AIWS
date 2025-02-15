@@ -22,7 +22,7 @@
     "antd": "^5.22.7",
     "antd-style": "^3.7.1",
     "axios": "^0.27.2",
-    "ethers": "^5.7.2",
+    "ethers": "^6.13.5",
     "ipfs-unixfs-importer": "^7.0.1",
     "multiformats": "^13.3.1",
     "nanoid": "^5.0.9",

@@ -2,8 +2,11 @@
 import { CID } from 'multiformats/cid'
 import { sha256 } from 'multiformats/hashes/sha2'
 
+export const AVATAR_URL = "https://ipfs.glitterprotocol.dev/ipfs/";
+export const MESSAGE_URL = "https://airag.glitterprotocol.tech/ipfs/";
+
 /**
- * Encrypt API key using XOR cipher
+ * Encrypt API key using XOR cipher 
  * @param apiKey Original API key to encrypt
  * @returns Base64 encoded encrypted string
  */

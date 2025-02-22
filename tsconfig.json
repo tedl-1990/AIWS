@@ -17,7 +17,8 @@
     "noFallthroughCasesInSwitch": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["src/*"],
+      "@solana/buffer-layout-utils": ["./node_modules/@solana/buffer-layout-utils"]
     },
     "typeRoots": ["./node_modules/@types", "./src/types"]
   },

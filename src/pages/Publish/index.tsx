@@ -20,13 +20,11 @@ import {
 } from "antd";
 import { UploadOutlined } from "@ant-design/icons";
 import type { RcFile } from "antd/es/upload/interface";
-import { ethers } from "ethers";
 import "./index.less";
-import { createContractRecord, uploadToIPFS } from "@/services/upload";
-import { setEnsRecord, getAllOwnedENSDomains } from "@/services/ens";
+import { uploadToIPFS } from "@/services/upload";
 import { ENetwork } from "@/services/network";
-import { useAccount } from "wagmi";
 import { PublishStep, StepData, FormValues } from "@/types";
+import { WalletService } from "@/services/wallet";
 const { TextArea } = Input;
 
 /**
@@ -41,16 +39,16 @@ const STEPS = {
   PREPARING: "Preparing files...",
   CREATING_AGENT: "Creating Agent...",
   UPLOADING_FILES: "Uploading files...",
-  CONFIRMING: "Binding ENS...",
+  CONFIRMING: "Binding Domain...",
   COMPLETED: "Completed!",
 };
 
 const enum EDataset {
   INDEX3 = "Index3",
   FARCASTER = "Farcaster",
-  LIBER3 = "Liber3",
-  CHAINFEEDS = "ChainFeeds",
-  DAILYFEEDS = "DailyFeeds",
+  WEB3NEWS = "Web3 News",
+  DAILYFEEDS = "Dailyfeeds",
+  COINGECKO = "Coingecko",
 }
 
 /**
@@ -67,13 +65,16 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
     PublishStep.CONTRACT
   );
   const [stepMessage, setStepMessage] = useState("");
-  const { address } = useAccount();
-  const [ensDomains, setEnsDomains] = React.useState<string[]>([]);
+
+  const [domains, setDomains] = React.useState<string[]>([]);
   const [loadingDomains, setLoadingDomains] = React.useState(false);
   const [imageUrl, setImageUrl] = useState<string>();
   const [stepData, setStepData] = useState<StepData>({
     step: PublishStep.CONTRACT,
   });
+  const walletService = WalletService.getInstance();
+  const address = walletService.getWalletInfo()?.address;
+  const network = walletService.getCurrentNetwork();
   const [errorStep, setErrorStep] = useState<PublishStep | null>(null);
 
   const isFormDisabled = currentStep !== PublishStep.CONTRACT;
@@ -106,7 +107,7 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
       case PublishStep.IPFS:
         return "IPFS upload failed. Please try this step again.";
       case PublishStep.ENS:
-        return "ENS record update failed. Please try this step again.";
+        return "Domain record update failed. Please try this step again.";
       default:
         return "An error occurred. Please try again.";
     }
@@ -123,7 +124,6 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
         message.error("Please upload an avatar!");
         return;
       }
-
       const data = {
         name: values.name,
         avatar: avatarFile,
@@ -138,7 +138,9 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
       };
 
       setStepMessage(STEPS.CREATING_AGENT);
-      const { txHash, ipfsInfo, fileList } = await createContractRecord(data);
+      const { txHash, ipfsInfo, fileList } = await walletService.createRecord(
+        data
+      );
 
       // Save data
       const newStepData = {
@@ -181,7 +183,11 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
         throw new Error("Avatar file not found");
       }
 
-      const result = await uploadToIPFS(stepData, (percent: any) => {
+      let chainId = "1";
+      if (network === ENetwork.Solana) {
+        chainId = "101";
+      }
+      const result = await uploadToIPFS(stepData, chainId, (percent: any) => {
         setStepMessage(`Uploading... ${percent}%`);
       });
 
@@ -220,21 +226,19 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
         throw new Error("Missing required data");
       }
 
-      // Set ENS records
+      // Set records
       try {
-        const chainId = ethers.BigNumber.from(
-          window.ethereum?.chainId
-        ).toNumber();
-        if (chainId === ENetwork.Ethereum) {
-          await setEnsRecord(formData.did, ipfsData.contentHash);
-          message.success("ENS records updated successfully");
-        }
-      } catch (error: any) {
-        console.error("Failed to set ENS records:", error);
+        await walletService.setRecord({
+          did: formData.did,
+          contenthash: ipfsData.contentHash,
+        });
+        message.success("Records updated successfully");
+      } catch (error) {
+        console.error("Failed to set records:", error);
         if (error instanceof Error) {
-          message.error(`Failed to update ENS records: ${error.message}`);
+          message.error(`Failed to update records: ${error.message}`);
         } else {
-          message.error("Failed to update ENS records");
+          message.error("Failed to update records");
         }
         return;
       }
@@ -250,8 +254,8 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
       setStepData({ step: PublishStep.CONTRACT });
       setCurrentStep(PublishStep.CONTRACT);
     } catch (error) {
-      console.error("ENS step failed:", error);
-      message.error("ENS update failed");
+      console.error("failed:", error);
+      message.error("Domain update failed");
       setErrorStep(PublishStep.ENS);
     } finally {
       setSubmitting(false);
@@ -284,20 +288,20 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
 
       try {
         setLoadingDomains(true);
-        const ownedNames = await getAllOwnedENSDomains(address);
+        const ownedNames = await walletService.getAllOwnedDomains();
         if (ownedNames.length > 0) {
-          setEnsDomains(ownedNames);
+          setDomains(ownedNames);
         }
       } catch (error) {
-        console.error("Failed to fetch ENS domains:", error);
-        message.error("Failed to load ENS domains. Please try again later.");
+        console.error("Failed to fetch domains:", error);
+        message.error("Failed to load domains. Please try again later.");
       } finally {
         setLoadingDomains(false);
       }
     };
 
     fetchENSDomains();
-  }, [address]);
+  }, [address, walletService]);
 
   const handleReset = () => {
     form.resetFields();
@@ -393,7 +397,7 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
         items={[
           { title: "Generate Agent" },
           { title: "Upload IPFS" },
-          { title: "Bind ENS" },
+          { title: "Bind Domain" },
         ]}
         style={{ marginBottom: 24 }}
       />
@@ -459,13 +463,13 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
           />
         </Form.Item>
 
-        {/* <Form.Item label="Chat Configuration" name="chatConfig">
+        <Form.Item label="Chat Configuration" name="chatConfig">
           <Checkbox onChange={handleChatConfigChange}>Chat with RAG</Checkbox>
           <p className="config-desc">
             Enhance chat responses by retrieving and integrating external data
             from selected datasets.
           </p>
-        </Form.Item> */}
+        </Form.Item>
 
         {chatConfigValue && (
           <Form.Item
@@ -480,20 +484,20 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
           >
             <Select placeholder="Please select a dataset">
               <Select.Option value={EDataset.INDEX3}>
-                {EDataset.INDEX3}
+                {EDataset.INDEX3} (Mirror, Farcaster, ENS Websites, Web3 News)
               </Select.Option>
               <Select.Option value={EDataset.FARCASTER}>
                 {EDataset.FARCASTER}
               </Select.Option>
-              <Select.Option value={EDataset.LIBER3}>
-                {EDataset.LIBER3}
+              <Select.Option value={EDataset.WEB3NEWS}>
+                {EDataset.WEB3NEWS}
               </Select.Option>
-              <Select.Option value={EDataset.CHAINFEEDS}>
-                {EDataset.CHAINFEEDS}
+              <Select.Option value={EDataset.COINGECKO}>
+                {EDataset.COINGECKO}
               </Select.Option>
-              <Select.Option value={EDataset.DAILYFEEDS}>
+              {/* <Select.Option value={EDataset.DAILYFEEDS}>
                 {EDataset.DAILYFEEDS}
-              </Select.Option>
+              </Select.Option> */}
             </Select>
           </Form.Item>
         )}
@@ -504,7 +508,7 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
               <span>Chat Prompt</span>{" "}
               <a
                 target="_blank"
-                href="https://ipfs.glitterprotocol.dev/ipfs/QmUrFbx7FyVKXDu4QhvwTLwdTK5daeL7Pde5pdvmGx6zbw"
+                href="https://ipfs.glitterprotocol.dev/ipfs/QmcY138nyXn9PEf26STTPeWHUBNUwbF43tih7avvJvsedt"
               >
                 Prompt Template
               </a>
@@ -525,8 +529,8 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
           />
         </Form.Item>
 
-        {/* <Form.Item
-          label="Blog Configuration"
+        <Form.Item
+          label="Blog Configuration (Optional)"
           name="blogConfig"
           rules={[
             {
@@ -535,51 +539,46 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
             },
           ]}
         >
-          <Checkbox onChange={handleBlogConfigChange}>Blog Generation</Checkbox>
+          <Checkbox onChange={handleBlogConfigChange}>
+            Blog Generation with RAG
+          </Checkbox>
           <p className="config-desc">
             Automatically generate blog summarizing key trends and highlights
             from selected datasets.
           </p>
-        </Form.Item> */}
+        </Form.Item>
 
-        {/* {blogConfigValue && (
+        {blogConfigValue && (
           <Form.Item
             label="Blog Dataset"
             name="blog_dataset"
             rules={[
               {
-                required: chatConfigValue,
+                required: blogConfigValue,
                 message: "Please select a dataset!",
               },
             ]}
           >
             <Select placeholder="Please select a dataset">
-              <Select.Option value={EDataset.INDEX3}>
-                {EDataset.INDEX3}
+              <Select.Option value={EDataset.WEB3NEWS}>
+                {EDataset.WEB3NEWS}
               </Select.Option>
-              <Select.Option value={EDataset.FARCASTER}>
-                {EDataset.FARCASTER}
-              </Select.Option>
-              <Select.Option value={EDataset.LIBER3}>
-                {EDataset.LIBER3}
-              </Select.Option>
-              <Select.Option value={EDataset.CHAINFEEDS}>
-                {EDataset.CHAINFEEDS}
-              </Select.Option>
-              <Select.Option value={EDataset.DAILYFEEDS}>
+              {/* <Select.Option value={EDataset.DAILYFEEDS}>
                 {EDataset.DAILYFEEDS}
-              </Select.Option>
+              </Select.Option> */}
             </Select>
           </Form.Item>
-        )} */}
+        )}
 
         <Form.Item
           label={
             <div className="prompt-label">
-              <span>Blog Prompt</span>{" "}
+              <div>
+                <span>Blog Prompt</span>
+              </div>
               <a
                 target="_blank"
-                href="https://ipfs.glitterprotocol.dev/ipfs/QmYTTeazKPmw1JChBL2Xqr4B7bxDz8KMsxhLRwd8xd4iVr"
+                href="https://ipfs.glitterprotocol.dev/ipfs/QmeTrPTkDbEKBchPiQm85SAvbZ5NxEh8GDbW6fvGGnWggP"
               >
                 Prompt Template
               </a>
@@ -603,12 +602,12 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
         <Form.Item
           label="DID"
           name="did"
-          rules={[{ required: true, message: "Please select an ENS domain!" }]}
+          rules={[{ required: true, message: "Please select a domain!" }]}
         >
           <Select
             disabled={isFormDisabled || !address}
             placeholder={
-              address ? "Select your ENS domain" : "Please connect wallet first"
+              address ? "Select your domain" : "Please connect wallet first"
             }
             loading={loadingDomains}
             notFoundContent={
@@ -616,28 +615,28 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
                 <Spin size="small" />
               ) : !address ? (
                 "Please connect wallet first"
-              ) : ensDomains.length === 0 ? (
-                "No ENS domains found for this address"
+              ) : domains.length === 0 ? (
+                "No domains found for this address"
               ) : null
             }
             onDropdownVisibleChange={async (open) => {
               if (open && address) {
                 try {
                   setLoadingDomains(true);
-                  const domains = await getAllOwnedENSDomains(address);
+                  const domains = await walletService.getAllOwnedDomains();
                   if (domains.length > 0) {
-                    setEnsDomains(domains);
+                    setDomains(domains);
                   }
                 } catch (error) {
-                  console.error("Failed to fetch ENS domains:", error);
-                  message.error("Failed to load ENS domains");
+                  console.error("Failed to fetch domains:", error);
+                  message.error("Failed to load domains");
                 } finally {
                   setLoadingDomains(false);
                 }
               }
             }}
           >
-            {ensDomains.map((domain) => (
+            {domains.map((domain) => (
               <Select.Option key={domain} value={domain}>
                 {domain}
               </Select.Option>

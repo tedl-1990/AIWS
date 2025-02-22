@@ -6,12 +6,12 @@
 
   a {
     font-weight: 500;
-    color: #00ffad;
+    color: #f0b90b;
     text-decoration: inherit;
   }
-  
+
   a:hover {
-    color: #00ffad;
+    color: #f0b90b;
   }
 
   .header {
@@ -31,17 +31,22 @@
         margin: 0;
         font-size: 24px;
         color: #ffffff;
+        margin-right: 8px;
       }
       .github-link {
         display: flex;
         background-color: #282828;
-        padding: 4px 8px;
+        padding: 4px;
         align-items: center;
         gap: 4px;
         font-size: 14px;
         color: #999;
-        margin-left: 16px;
       }
+    }
+  }
+  .agent-list-tabs {
+    .ant-tabs-nav {
+      margin-bottom: 0;
     }
   }
 }
@@ -68,12 +73,24 @@
     .ant-table-tbody > tr:hover > td {
       background: #262626;
     }
+
+    .message-content {
+      max-width: 300px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .agent-name {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
   }
 
   .model-tag {
     font-size: 12px;
     background: rgba(0, 255, 173, 0.2);
-    color: #00ffad;
+    color: #f0b90b;
     padding: 2px 8px;
     border-radius: 4px;
   }
@@ -95,5 +112,91 @@
 
   .ant-drawer-body {
     padding: 24px;
+  }
+}
+
+@media (max-width: 768px) {
+  .agent-list {
+    padding: 16px;
+  }
+  .mobile-agent-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-top: 16px;
+    .mobile-agent-list-loading {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 60vh;
+    }
+    .mobile-agent-item {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 16px;
+      background: #262626;
+      border-radius: 8px;
+      font-family: "NexaText-Regular";
+      .mobile-agent-item-label {
+        font-family: "NexaText-Bold";
+        font-weight: 500;
+        color: rgba(255, 255, 255, 0.85);
+      }
+      .mobile-agent-item-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .mobile-agent-item-avatar {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        overflow: hidden;
+        img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+      }
+      .mobile-agent-item-name {
+        font-size: 16px;
+        font-weight: 500;
+        color: #ffffff;
+      }
+      .mobile-agent-item-description {
+        font-size: 14px;
+        color: rgba(255, 255, 255, 0.85);
+      }
+      .mobile-agent-item-did {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.85);
+      }
+      .mobile-agent-item-ipfsHash {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.85);
+        cursor: pointer;
+        a {
+          color: #f0b90b;
+          text-decoration: underline;
+        }
+      }
+      .mobile-agent-item-action {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: 16px;
+        button {
+          width: 100%;
+        }
+      }
+    }
+  }
+}
+
+.top-agent-row {
+  background-color: #242424 !important;
+
+  &:hover > td {
+    background-color: #242424 !important;
   }
 }

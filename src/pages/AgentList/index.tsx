@@ -4,41 +4,38 @@
  */
 
 import React, { useState, useCallback, useEffect } from "react";
-import { Avatar, Button, Table, Drawer, Space, message, Tooltip } from "antd";
-import type { ColumnsType, TablePaginationConfig } from "antd/es/table";
-import { useConnect, useAccount, useDisconnect, useSignMessage } from "wagmi";
-import { MetaMaskConnector } from "wagmi/connectors/metaMask";
 import {
-  PlusOutlined,
-  WalletOutlined,
-  MessageOutlined,
-} from "@ant-design/icons";
+  Avatar,
+  Button,
+  Table,
+  Drawer,
+  Space,
+  message,
+  Tooltip,
+  Tabs,
+  Spin,
+} from "antd";
+import type { ColumnsType, TablePaginationConfig } from "antd/es/table";
+import { WalletOutlined, MessageOutlined } from "@ant-design/icons";
 import Publish from "../Publish";
 import "./index.less";
-import { AxiosError } from "axios";
 import WalletConnect from "@/components/WalletConnect";
 import logo from "@/assets/images/logo.jpg";
-import { getAllRecords, IRecord } from "@/services/upload";
+import { IRecord } from "@/services/upload";
 import githubLogo from "@/assets/images/icon-github.png";
-
-interface IContractHistoryRow {
-  id: string;
-  name: string;
-  avatar: string;
-  description: string;
-  did: string;
-  timestamp: number;
-  ipfsHash: string;
-  address: string;
-}
-
-/**
- * Interface for wallet connection errors
- */
-interface ConnectError extends Error {
-  message: string;
-}
-
+import xLogo from "@/assets/images/icon-X.png";
+import AgentCard, { IContractHistoryRow } from "@/components/agentCard";
+import MessageCard, { IMessageRow } from "@/components/MessageCard";
+import { getMessageList } from "@/services/api";
+import { AVATAR_URL, MESSAGE_URL } from "@/utils";
+import avatar_default from "@/assets/images/default-avatar.png";
+import icEthereum from "@/assets/images/ic-eth.png";
+import icSolana from "@/assets/images/ic-sol.png";
+import starPng from "@/assets/images/icon-star.png";
+import { WalletService } from "@/services/wallet";
+import { ENetwork } from "@/services/network";
+import { networkState } from "@/store/network";
+import { useRecoilState } from "recoil";
 /**
  * Create authentication message with timestamp
  * @param address Wallet address
@@ -63,6 +60,17 @@ ${timestamp}
   };
 };
 
+enum AgentListTab {
+  Agents = "Agents",
+  Messages = "Messages",
+}
+
+const MOBILE_BREAKPOINT = 768;
+
+// 添加黑名单数组
+const DID_BLACKLIST = [""];
+const TOP_AGENTS = ["ainick.eth"];
+
 /**
  * Main AgentList component
  */
@@ -71,30 +79,49 @@ const AgentList: React.FC = () => {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [tableLoading, setTableLoading] = useState(false);
+  const [tableMessageLoading, setTableMessageLoading] = useState(false);
   const [connecting, setConnecting] = useState(false);
-  const [signing, setSigning] = useState(false);
   const [total, setTotal] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [currentMessagePage, setCurrentMessagePage] = useState(1);
+  const [pageSize, setPageSize] = useState(8);
+  const [messagePageSize, setMessagePageSize] = useState(8);
+  const [totalMessage, setTotalMessage] = useState(0);
   const [agents, setAgents] = useState<IContractHistoryRow[]>([]);
+  const [isMobile, setIsMobile] = useState(false);
+  const [messages, setMessages] = useState<IMessageRow[]>([]);
+  const [isWalletConnected, setIsWalletConnected] = useState(false);
+  const [messageApi, contextHolder] = message.useMessage();
+  const [connectError, setConnectError] = useState(false);
+  const [userCancelled, setUserCancelled] = useState(false);
 
-  // Wallet connection hooks
-  const { address, isConnected } = useAccount();
-  const { connect } = useConnect({
-    connector: new MetaMaskConnector(),
-    onError(error: ConnectError) {
-      message.error("Failed to connect wallet: " + error.message);
-      setConnecting(false);
-    },
-  });
-  const { disconnect } = useDisconnect();
-  const { signMessageAsync } = useSignMessage();
+  const walletService = WalletService.getInstance();
+  const [network, setNetwork] = useRecoilState(networkState);
 
-  const fetchRecords = async (): Promise<void> => {
+  // Effects
+  useEffect(() => {
+    const checkMobile = () =>
+      setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
+
+  useEffect(() => {
+    setIsWalletConnected(walletService.isConnected());
+
+    const unsubscribe = walletService.subscribe(() => {
+      setIsWalletConnected(walletService.isConnected());
+    });
+
+    return unsubscribe;
+  }, [walletService]);
+
+  const fetchRecords = useCallback(async (): Promise<void> => {
     try {
       setTableLoading(true);
-      const { records } = await getAllRecords();
-
+      const { records } = await walletService.getAllRecords();
       const latestRecords = records.reduce(
         (acc: { [key: string]: IRecord }, curr: IRecord) => {
           if (curr.did) {
@@ -111,26 +138,35 @@ const AgentList: React.FC = () => {
       );
 
       const formattedAgents: IContractHistoryRow[] = Object.values(
-        latestRecords
-      ).map((record: IRecord, index: number) => ({
-        id: `${record.creator_address}-${index}`,
-        name: record.agent_name,
-        avatar: record.avatar,
-        timestamp: record.timestamp,
-        description: record.agent_intro,
-        did: record.did,
-        ipfsHash: record.contenthash,
-        address: record.creator_address,
-      }));
+        latestRecords as { [key: string]: IRecord }
+      )
+        .filter((record) => !DID_BLACKLIST.includes(record.did))
+        .map((record: IRecord, index: number) => ({
+          id: `${record.creator_address}-${index}`,
+          name: record.agent_name,
+          avatar: record.avatar,
+          timestamp: record.timestamp,
+          description: record.agent_intro,
+          did: record.did,
+          ipfsHash: record.contenthash,
+          address: record.creator_address,
+          isTop: TOP_AGENTS.includes(record.did),
+          network: record.network,
+        }))
+        .sort((a, b) => {
+          if (a.isTop && !b.isTop) return -1;
+          if (!a.isTop && b.isTop) return 1;
+          return b.timestamp - a.timestamp;
+        });
       setTotal(formattedAgents.length);
       setAgents(formattedAgents);
     } catch (error) {
       console.error("Fetch records error:", error);
-      message.error("Failed to load agents");
+      // message.error("Failed to load agents");
     } finally {
       setTableLoading(false);
     }
-  };
+  }, [walletService]);
 
   const handleTableChange = (pagination: TablePaginationConfig) => {
     setCurrentPage(pagination.current || 1);
@@ -138,26 +174,27 @@ const AgentList: React.FC = () => {
   };
 
   /**
-   * Sign message using wallet
-   * @param msg Message to sign
-   * @returns Signed message or null if failed
+   * Handle wallet disconnection
    */
-  const signMessage = useCallback(
-    async (msg: string) => {
-      if (signing) return null;
-      try {
-        setSigning(true);
-        return await signMessageAsync({ message: msg });
-      } catch (err) {
-        console.error("Sign message error:", err);
-        handleDisconnect();
-        throw new Error("Failed to sign message");
-      } finally {
-        setSigning(false);
-      }
-    },
-    [signMessageAsync, signing, disconnect]
-  );
+  const handleDisconnect = useCallback(async () => {
+    try {
+      await walletService.disconnectWallet();
+      setUserCancelled(true);
+      setIsWalletConnected(false);
+    } catch (err) {
+      localStorage.removeItem("Authentication-Tokens");
+      localStorage.removeItem("Token_address");
+      window.location.reload();
+      messageApi.error(
+        err instanceof Error ? err.message : "failed to disconnect"
+      );
+    }
+  }, [walletService, messageApi]);
+
+  const handleMessageTableChange = (pagination: TablePaginationConfig) => {
+    setCurrentMessagePage(pagination.current || 1);
+    setMessagePageSize(pagination.pageSize || 10);
+  };
 
   /**
    * Handle user login
@@ -166,135 +203,157 @@ const AgentList: React.FC = () => {
    */
   const handleLogin = useCallback(
     async (address: string) => {
-      if (loading || signing) return;
+      if (loading) return;
       try {
         setLoading(true);
         const { msg } = createLoginMessage(address);
-        const signature = await signMessage(msg);
-
+        const signature = await walletService.signMessage(msg);
         if (!signature) return;
 
         localStorage.setItem("Authentication-Tokens", signature);
         localStorage.setItem("Token_address", address);
         return signature;
       } catch (err) {
-        const error = err as Error | AxiosError;
-        if (!error.message.includes("User rejected")) {
-          console.error("Login error:", error);
-          message.error(
-            `Login failed: ${
-              error instanceof AxiosError
-                ? error.response?.data?.message || error.message
-                : error.message
-            }`
-          );
+        const error = err as Error;
+        if (error.message.includes("User rejected")) {
+          await handleDisconnect();
+          setUserCancelled(true);
+        } else {
+          messageApi.error("login failed: " + error.message);
         }
       } finally {
         setLoading(false);
       }
     },
-    [signMessage, loading, signing]
+    [loading, walletService, messageApi, handleDisconnect]
   );
 
   /**
    * Handle wallet connection
    */
-  const handleConnect = async () => {
+  const handleConnect = useCallback(async () => {
     if (connecting) return;
     try {
       setConnecting(true);
-      if (typeof window.ethereum === "undefined") {
-        window.open("https://metamask.io/download/", "_blank");
-        return;
+      setConnectError(false);
+      setUserCancelled(false);
+      const savedType = network;
+      await walletService.connectWallet(savedType);
+      // after connection, if it is a new connection, trigger signature
+      const walletInfo = walletService.getWalletInfo();
+      if (walletInfo?.address) {
+        const storedAddress = localStorage.getItem("Token_address");
+        if (!storedAddress || storedAddress !== walletInfo.address) {
+          await handleLogin(walletInfo.address);
+        }
       }
-      await connect();
     } catch (err) {
-      console.error("Connect error:", err);
-      message.error("Failed to connect wallet");
+      const error = err as Error;
+      setConnectError(true);
+
+      if (
+        error.message.includes("User rejected") ||
+        error.message.includes("User denied")
+      ) {
+        setUserCancelled(true);
+        localStorage.removeItem("Authentication-Tokens");
+        localStorage.removeItem("Token_address");
+      }
     } finally {
       setConnecting(false);
     }
-  };
+  }, [connecting, walletService, handleLogin, network]);
+
+  const fetchMessages = useCallback(async (): Promise<void> => {
+    try {
+      setTableMessageLoading(true);
+      const { data } = await getMessageList({
+        page: 1,
+        limit: 100,
+      });
+      const { list, total_count } = data;
+      setMessages(list);
+      setTotalMessage(total_count);
+    } catch (error) {
+      console.error("Fetch messages error:", error);
+      message.error("Failed to load messages");
+    } finally {
+      setTableMessageLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchRecords();
-  }, []);
+    fetchMessages();
+  }, [fetchRecords, fetchMessages]);
 
   /**
    * Initialize login on component mount
    */
   useEffect(() => {
     let mounted = true;
-    let loginAttempted = false;
 
-    const initLogin = async () => {
-      if (loginAttempted) return;
-      loginAttempted = true;
-
+    const restoreWalletConnection = async () => {
+      // check if there is stored login information
       const storedToken = localStorage.getItem("Authentication-Tokens");
       const storedAddress = localStorage.getItem("Token_address");
 
-      try {
-        if (window.ethereum) {
-          const accounts = await window.ethereum.request({
-            method: "eth_accounts",
-          });
-          if (!accounts || accounts.length === 0) {
-            localStorage.removeItem("Authentication-Tokens");
-            localStorage.removeItem("Token_address");
-            return;
-          }
-        }
+      // if there is no stored information, no need to restore
+      if (!storedToken || !storedAddress || !network) {
+        return;
+      }
 
-        if (storedToken && storedAddress && !isConnected) {
-          if (mounted) {
-            await connect();
-          }
+      try {
+        // if the wallet is not connected, try to restore connection
+        if (!isWalletConnected) {
+          await walletService.connectWallet(network);
           return;
         }
 
-        if (isConnected && address && address !== storedAddress && mounted) {
-          const token = await handleLogin(address);
-          if (token) {
-            message.success("Connected successfully");
+        // if the wallet is connected but the address does not match, login again
+        const walletInfo = walletService.getWalletInfo();
+        if (walletInfo?.address && walletInfo.address !== storedAddress) {
+          const token = await handleLogin(walletInfo.address);
+          if (token && mounted) {
+            messageApi.success("connected successfully");
           }
         }
       } catch (err) {
         const error = err as Error;
-        if (error.message.toLowerCase().includes("wallet_requestPermissions")) {
-          return;
-        }
-        if (mounted) {
-          message.error("Failed to login: " + error.message);
+        // only handle errors that are not user cancelled
+        if (!error.message.includes("User rejected") && mounted) {
+          // clear all stored information
           localStorage.removeItem("Authentication-Tokens");
           localStorage.removeItem("Token_address");
         }
       }
     };
 
-    if (!loading && !signing) {
-      initLogin();
+    // only restore connection if not loaded and not cancelled
+    if (!loading && !connectError && !userCancelled) {
+      restoreWalletConnection();
     }
 
     return () => {
       mounted = false;
     };
-  }, [isConnected, address, connect, handleLogin, loading, signing]);
-
-  /**
-   * Handle wallet disconnection
-   */
-  const handleDisconnect = () => {
-    disconnect();
-    localStorage.removeItem("Authentication-Tokens");
-    localStorage.removeItem("Token_address");
-  };
+  }, [
+    isWalletConnected,
+    loading,
+    connectError,
+    userCancelled,
+    walletService,
+    handleLogin,
+    messageApi,
+    network,
+  ]);
 
   /**
    * Show publish drawer if wallet is connected
    */
   const showPublishDrawer = () => {
-    if (!isConnected) {
-      message.error("Please connect wallet first");
+    if (!isWalletConnected) {
+      message.error("please connect wallet");
       return;
     }
     setDrawerOpen(true);
@@ -305,9 +364,10 @@ const AgentList: React.FC = () => {
    * @param agent New agent data
    */
   const handleCreateAgent = () => {
-    fetchRecords().finally(() => {
+    setTimeout(() => {
       setDrawerOpen(false);
-    });
+      fetchRecords();
+    }, 500);
   };
 
   /**
@@ -315,20 +375,10 @@ const AgentList: React.FC = () => {
    * @param record Record to handle
    */
   const handleChat = (record: IContractHistoryRow) => {
-    const recordsWithSameDid = agents.filter(
-      (agent) => agent.did === record.did
-    );
-    const latestRecord = recordsWithSameDid.reduce((latest, current) =>
-      current.timestamp > latest.timestamp ? current : latest
-    );
-
-    if (record.timestamp === latestRecord.timestamp) {
+    if (record.network === ENetwork.Ethereum) {
       window.open(`https://${record.did}.limo`, "_blank");
     } else {
-      window.open(
-        `https://ipfs.glitterprotocol.dev/ipfs/${record.ipfsHash}`,
-        "_blank"
-      );
+      window.open(`https://${record.did}.sol.build`, "_blank");
     }
   };
 
@@ -343,9 +393,20 @@ const AgentList: React.FC = () => {
       render: (_, record) => (
         <Space>
           <Avatar
+            shape="square"
             src={`https://ipfs.glitterprotocol.dev/ipfs/${record.avatar}`}
           />
-          <span>{record.name}</span>
+          <div className="agent-name">
+            <span>{record.name}</span>
+            {record.isTop && (
+              <img
+                width={16}
+                src={starPng}
+                alt="Top Agent"
+                className="top-agent-icon"
+              />
+            )}
+          </div>
         </Space>
       ),
     },
@@ -359,11 +420,34 @@ const AgentList: React.FC = () => {
       title: "DID",
       dataIndex: "did",
       key: "did",
-      render: (_, record) => (
-        <a href={`https://${record.did}.limo`} target="_blank">
-          {record.did}
-        </a>
-      ),
+      render: (_, record) =>
+        record.network === ENetwork.Ethereum ? (
+          <Space size={8} align="center">
+            <img
+              style={{ verticalAlign: "sub" }}
+              width={16}
+              height={16}
+              src={icEthereum}
+              alt=""
+            />
+            <a href={`https://${record.did}.limo`} target="_blank">
+              {record.did}
+            </a>
+          </Space>
+        ) : (
+          <Space size={8} align="center">
+            <img
+              style={{ verticalAlign: "sub" }}
+              width={16}
+              height={16}
+              src={icSolana}
+              alt=""
+            />
+            <a href={`https://${record.did}.sol.build`} target="_blank">
+              {record.did}.sol
+            </a>
+          </Space>
+        ),
     },
     {
       title: "IPFS Hash",
@@ -388,6 +472,7 @@ const AgentList: React.FC = () => {
       render: (_, record) => (
         <Button
           type="primary"
+          style={{ color: "#000" }}
           icon={<MessageOutlined />}
           onClick={() => handleChat(record)}
         >
@@ -397,8 +482,80 @@ const AgentList: React.FC = () => {
     },
   ];
 
+  /**
+   * Table columns configuration
+   */
+  const messageColumns: ColumnsType<IMessageRow> = [
+    {
+      title: "IPFS Hash",
+      dataIndex: "message_cid ",
+      key: "message_cid",
+      render: (_, record) => (
+        <a href={`${MESSAGE_URL}${record.message_cid}`} target="_blank">
+          {record.message_cid.slice(0, 6)}...{record.message_cid.slice(-4)}
+        </a>
+      ),
+    },
+    {
+      title: "Time",
+      dataIndex: "time",
+      key: "time",
+      render: (_, record) => {
+        return (
+          <span>{new Date(record.create_time * 1000).toLocaleString()}</span>
+        );
+      },
+    },
+    {
+      title: "Content",
+      dataIndex: "content",
+      key: "content",
+      render: (_, record) => (
+        <div className="message-content">{record.message}</div>
+      ),
+    },
+    {
+      title: "Sender",
+      dataIndex: "sender",
+      key: "sender",
+      render: (_, record: IMessageRow) => (
+        <Space>
+          {record.role === 1 ? (
+            <>
+              <Avatar
+                shape="square"
+                src={`${AVATAR_URL}${record.agent_files_info.agent_avatar}`}
+              />
+              <span>{record.agent_files_info.agent_name}</span>
+            </>
+          ) : (
+            <>
+              <Avatar shape="square" src={avatar_default} />
+              <span>User</span>
+            </>
+          )}
+        </Space>
+      ),
+    },
+    {
+      title: "Previous IPFS Hash",
+      dataIndex: "prev_message_cid",
+      key: "prev_message_cid",
+      render: (_, record) =>
+        record.prev_message_cid ? (
+          <a href={`${MESSAGE_URL}${record.prev_message_cid}`} target="_blank">
+            {record.prev_message_cid.slice(0, 6)}...
+            {record.prev_message_cid.slice(-4)}
+          </a>
+        ) : (
+          <span>--</span>
+        ),
+    },
+  ];
+
   return (
     <div className="agent-list">
+      {contextHolder}
       <div className="header">
         <div className="logo">
           <img width={48} height={48} src={logo} alt="" />
@@ -410,38 +567,119 @@ const AgentList: React.FC = () => {
           >
             <img width={16} height={16} src={githubLogo} alt="" />
           </a>
+          <a
+            href="https://x.com/AIWS_WORLD"
+            className="github-link"
+            target="_blank"
+          >
+            <img width={16} height={16} src={xLogo} alt="" />
+          </a>
         </div>
-        <Space>
-          {isConnected && (
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={showPublishDrawer}
+        {!isMobile && (
+          <Space>
+            {/* <Button
+              onClick={() => {
+                walletService.setRecord({
+                  did: "xiyangyang423",
+                  contenthash: "QmeHebB8bP1yufCDhtjw4FAw1DBGJT6zvMLuec9Tgz6ysV",
+                });
+              }}
             >
-              Create Agent
-            </Button>
-          )}
-          <WalletConnect loading={loading} onDisconnect={handleDisconnect} />
-        </Space>
+              setsns
+            </Button> */}
+            <WalletConnect
+              loading={loading}
+              onDisconnect={handleDisconnect}
+              showPublishDrawer={showPublishDrawer}
+              onConnect={async (type: ENetwork) => {
+                setNetwork(type);
+                // after connection, trigger signature immediately
+                const walletInfo = walletService.getWalletInfo();
+                if (walletInfo?.address) {
+                  const storedAddress = localStorage.getItem("Token_address");
+                  if (!storedAddress || storedAddress !== walletInfo.address) {
+                    await handleLogin(walletInfo.address);
+                  }
+                }
+              }}
+            />
+          </Space>
+        )}
       </div>
 
-      <Table
-        columns={columns}
-        dataSource={agents}
-        rowKey="id"
-        className="agent-table"
-        loading={tableLoading}
-        pagination={{
-          current: currentPage,
-          pageSize,
-          total: total,
-          onChange: (page, size) => {
-            setCurrentPage(page);
-            setPageSize(size);
-          },
-        }}
-        onChange={handleTableChange}
-      />
+      <Tabs className="agent-list-tabs">
+        <Tabs.TabPane tab={AgentListTab.Agents} key={AgentListTab.Agents}>
+          {!isMobile ? (
+            <Table
+              columns={columns}
+              dataSource={agents}
+              rowKey="id"
+              className="agent-table"
+              loading={tableLoading}
+              pagination={{
+                current: currentPage,
+                pageSize,
+                total: total,
+                onChange: (page, size) => {
+                  setCurrentPage(page);
+                  setPageSize(size);
+                },
+              }}
+              onChange={handleTableChange}
+              rowClassName={(record) => (record.isTop ? "top-agent-row" : "")}
+            />
+          ) : (
+            <div className="mobile-agent-list">
+              {tableLoading ? (
+                <div className="mobile-agent-list-loading">
+                  <Spin />
+                </div>
+              ) : (
+                agents.map((agent) => (
+                  <AgentCard
+                    agent={agent}
+                    handleChat={handleChat}
+                    key={agent.id}
+                  />
+                ))
+              )}
+            </div>
+          )}
+        </Tabs.TabPane>
+        <Tabs.TabPane tab={AgentListTab.Messages} key={AgentListTab.Messages}>
+          {!isMobile ? (
+            <Table
+              columns={messageColumns}
+              dataSource={messages}
+              rowKey="id"
+              className="agent-table"
+              loading={tableMessageLoading}
+              pagination={{
+                current: currentMessagePage,
+                pageSize: messagePageSize,
+                total: totalMessage,
+                onChange: (page, size) => {
+                  setCurrentMessagePage(page);
+                  setMessagePageSize(size);
+                },
+              }}
+              onChange={handleMessageTableChange}
+            />
+          ) : (
+            <div className="mobile-message-list">
+              {tableMessageLoading ? (
+                <div className="mobile-message-list-loading">
+                  <Spin />
+                </div>
+              ) : (
+                messages.map((message) => (
+                  <MessageCard key={message.id} message={message} />
+                ))
+              )}
+            </div>
+          )}
+        </Tabs.TabPane>
+      </Tabs>
 
       <Drawer
         title="Create New AI Agent"
@@ -457,14 +695,18 @@ const AgentList: React.FC = () => {
           },
         }}
       >
-        {isConnected ? (
+        {isWalletConnected ? (
           <div style={{ maxWidth: 800, width: "100%" }}>
             <Publish onSuccess={handleCreateAgent} />
           </div>
         ) : (
           <div style={{ textAlign: "center", padding: "20px" }}>
-            <p>Please connect your wallet first</p>
-            <Button icon={<WalletOutlined />} onClick={handleConnect}>
+            <p>Please connect wallet first</p>
+            <Button
+              icon={<WalletOutlined />}
+              style={{ color: "#000" }}
+              onClick={handleConnect}
+            >
               Connect Wallet
             </Button>
           </div>

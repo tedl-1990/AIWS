@@ -1,53 +1,72 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { Bubble, useXAgent, useXChat } from '@ant-design/x'
-import { Button, Input, Modal, Tooltip } from 'antd'
-import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react'
-import ReactMarkdown from 'react-markdown'
-import { v4 as uuidv4 } from 'uuid'
-import './index.less'
+import { Bubble, useXAgent, useXChat } from "@ant-design/x";
+import { Button, Modal, Tooltip } from "antd";
+import React, {
+  useEffect,
+  useState,
+  useRef,
+  useMemo,
+  useCallback,
+} from "react";
+import ReactMarkdown from "react-markdown";
+import { v4 as uuidv4 } from "uuid";
+import "./index.less";
 
-import { sendMessage } from '@/services/ai'
-import { getBlogList } from '@/services/aiChatFeed'
-import { getEnsSocialAccounts } from '@/services/ens'
+import { sendMessage } from "@/services/ai";
+import { getBlogList } from "@/services/aiChatFeed";
+import { getEnsSocialAccounts } from "@/services/ens";
 
 // Assets
-import icSend from '@/assets/images/arrow-top.png'
-import icJump from '@/assets/images/jump.png'
-import imgDefaultAvatar from '@/assets/images/default-avatar.png'
-import icEmpty from '@/assets/images/empty.png'
-import icClose from '@/assets/images/close.png'
-import icTwitter from '@/assets/images/ic-x.png'
-import icTelegram from '@/assets/images/ic-telegram.png'
-import icGithub from '@/assets/images/ic-github.png'
+import icSend from "@/assets/images/arrow-top.png";
+import icJump from "@/assets/images/jump.png";
+import imgDefaultAvatar from "@/assets/images/default-avatar.png";
+import icEmpty from "@/assets/images/empty.png";
+import icClose from "@/assets/images/close.png";
+import icTwitter from "@/assets/images/ic-x.png";
+import icTelegram from "@/assets/images/ic-telegram.png";
+import icGithub from "@/assets/images/ic-github.png";
+import icFarcaster from "@/assets/images/ic-farcaster.png";
+import icCopy from "@/assets/images/ic-copy.png";
+import { MESSAGE_URL } from "@/utils";
+import Loader from "@/components/Loader";
 
 // Types
 interface FeedItem {
-  title: string
-  content: string
+  title: string;
+  content: string;
 }
 
-const HAS_BLOG = false
+interface CustomMessageInfo {
+  messageCid: string;
+  id: string;
+  message: string;
+  status: string;
+  showCid: boolean;
+}
+
+const HAS_BLOG = true;
 
 // Constants
 const DEFAULT_CONFIG = {
   avatar: imgDefaultAvatar,
-  name: 'On-Chain Hacker - Nova',
+  name: "On-Chain Hacker - Nova",
+  behaviorDesc: "",
   functionDesc:
-    'A tech-savvy blockchain expert skilled in smart contracts and security. Nova is precise, logical, and always reliable.',
-  model: 'gpt-3.5-turbo',
-  did: 'nick.eth',
-  id: '0',
-  agentId: 'Vi2L02VaH8HZG5MmaUH9B',
-  blogPrompt: '',
+    "A tech-savvy blockchain expert skilled in smart contracts and security. Nova is precise, logical, and always reliable.",
+  model: "gpt-3.5-turbo",
+  did: "nick.eth",
+  id: "0",
+  agentId: "l5_pEJ6aAydRl8c0KQsIH",
+  blogPrompt: "",
   hasBlog: HAS_BLOG,
-}
+};
 
-const MOBILE_BREAKPOINT = 760
-const sessionId = uuidv4()
+const MOBILE_BREAKPOINT = 760;
+const sessionId = uuidv4();
 
 const Independent: React.FC = () => {
   // Data
-  const aiData = window?.aiData as any
+  const aiData = window?.aiData as any;
   const {
     avatar = DEFAULT_CONFIG.avatar,
     name = DEFAULT_CONFIG.name,
@@ -58,203 +77,310 @@ const Independent: React.FC = () => {
     agentId,
     id,
     hasBlog = HAS_BLOG,
-  } = aiData || DEFAULT_CONFIG
+  } = aiData || DEFAULT_CONFIG;
 
   // States
-  const [content, setContent] = useState('')
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [isComposing, setIsComposing] = useState(false)
-  const [activeTab, setActiveTab] = useState<'feed' | 'chat'>(hasBlog ? 'feed' : 'chat')
-  const [feedList, setFeedList] = useState<FeedItem[]>([])
-  const [isOnMobile, setIsOnMobile] = useState(false)
-  const [isCopied, setIsCopied] = useState(false)
-  const [ensSocialAccounts, setEnsSocialAccounts] = useState<any>({})
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isComposing, setIsComposing] = useState(false);
+  const [activeTab, setActiveTab] = useState<"feed" | "chat">(
+    hasBlog ? "feed" : "chat"
+  );
+  const [feedList, setFeedList] = useState<FeedItem[]>([]);
+  const [isOnMobile, setIsOnMobile] = useState(false);
+  const [isCopied, setIsCopied] = useState(false);
+  const [activeMessageCid, setActiveMessageCid] = useState<string>("");
+  const [ensSocialAccounts, setEnsSocialAccounts] = useState<{
+    twitter: string;
+    telegram: string;
+    github: string;
+    farcaster: string;
+  }>({
+    twitter: "",
+    telegram: "",
+    github: "",
+    farcaster: "",
+  });
   // Refs
-  const chatContainerRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<any>(null)
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<any>(null);
 
   const sessionParam = {
     sessionId,
     agentId: agentId || id,
     ens: did,
-  }
+  };
 
   // Chat configuration
   const roles = {
     ai: {
-      placement: 'start' as const,
-      typing: { step: 5, interval: 20 },
+      placement: "start" as const,
+      typing: { 
+        step: 1,
+        interval: 30,
+        enabled: true
+      },
       avatar: { src: avatar },
+      loadingRender: () => <Loader />,
     },
     local: {
-      placement: 'end' as const,
-      variant: 'shadow' as const,
+      placement: "end" as const,
+      variant: "shadow" as const,
     },
-  }
+  };
 
   // Utility functions
   const scrollChatToBottom = useCallback(() => {
     requestAnimationFrame(() => {
       if (chatContainerRef.current) {
-        chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight
+        chatContainerRef.current.scrollTop =
+          chatContainerRef.current.scrollHeight;
       }
-    })
-  }, [])
+    });
+  }, []);
 
   const copyToClipboard = useCallback((text: string) => {
     try {
-      navigator.clipboard.writeText(text)
-      setIsCopied(true)
+      navigator.clipboard.writeText(text);
+      setIsCopied(true);
     } catch (error) {
-      console.error('Failed to copy:', error)
+      console.error("Failed to copy:", error);
     }
-  }, [])
+  }, []);
 
   // Chat handling
   const [agent] = useXAgent({
     request: async ({ message }, { onSuccess, onUpdate }) => {
       try {
         await sendMessage(
-          message || '',
+          message || "",
           sessionId,
-          (text: string) => {
-            onUpdate(text)
-            scrollChatToBottom()
+          (text: string, messageCid: string) => {
+            updateMessageCid(text, messageCid);
           },
           (text: string) => {
-            onSuccess(text)
-            scrollChatToBottom()
+            onUpdate(text);
+            scrollChatToBottom();
           },
-        )
+          (text: string, messageCid: string) => {
+            onSuccess(text);
+            updateMessageCid(text, messageCid);
+            scrollChatToBottom();
+          }
+        );
       } catch (error) {
-        console.error('Error:', error)
-        onSuccess('Sorry, an error occurred. Please try again later.')
+        console.error("Error:", error);
+        onSuccess("Sorry, an error occurred. Please try again later.");
       }
     },
-  })
+  });
 
-  const { onRequest, messages } = useXChat({ agent })
+  const { onRequest, messages, setMessages } = useXChat<string, string>({
+    agent,
+    requestPlaceholder: "Waiting...",
+  });
+
+  const updateMessageCid = useCallback(
+    (message: string, messageCid: string) => {
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.message === message ? { ...msg, messageCid, showCid: false } : msg
+        )
+      );
+    },
+    [setMessages]
+  );
 
   const onSubmit = useCallback(() => {
-    const content = inputRef.current?.value
-    if (isComposing || !content) return
-    onRequest(content)
-    inputRef.current.value = ''
-    setContent('')
-    scrollChatToBottom()
-  }, [isComposing, onRequest, scrollChatToBottom])
+    const content = inputRef.current?.value;
+    if (isComposing || !content) return;
+    onRequest(content);
+    inputRef.current.value = "";
+    scrollChatToBottom();
+  }, [isComposing, onRequest, scrollChatToBottom]);
 
   // Feed handling
-  const [feedLoading, setFeedLoading] = useState(false)
+  const [feedLoading, setFeedLoading] = useState(false);
   const queryFeedList = useCallback(async () => {
     try {
-      setFeedLoading(true)
+      setFeedLoading(true);
       const res = await getBlogList({
-        agent_id: sessionParam.agentId,
+        agent_id: String(sessionParam.agentId),
         page: 1,
         limit: 100,
-      })
-      setFeedList(res.data)
-      setFeedLoading(false)
+      });
+      setFeedList(res.data);
+      setFeedLoading(false);
     } catch (error) {
-      setFeedLoading(false)
-      console.error('Failed to fetch feed:', error)
+      setFeedLoading(false);
+      console.error("Failed to fetch feed:", error);
     }
-  }, [sessionParam.agentId])
-
+  }, [sessionParam.agentId]);
   // Components
   const CustomBubble = useCallback(
-    ({ content }: { content: string }) => (
-      <div className='markdown-content'>
-        <ReactMarkdown>{content}</ReactMarkdown>
+    ({ content, messageCid }: { content: string; messageCid: string }) => (
+      <div
+        className="markdown-content"
+        onClick={() => {
+          if (!isOnMobile) return;
+          if (activeMessageCid === messageCid) {
+            setActiveMessageCid("");
+          } else {
+            setActiveMessageCid(messageCid);
+          }
+        }}
+      >
+        <div className="message-content">
+          <ReactMarkdown
+            components={{
+              a: (props) => (
+                <a {...props} target="_blank" rel="noopener noreferrer" />
+              ),
+            }}
+          >
+            {content}
+          </ReactMarkdown>
+        </div>
+        {(activeMessageCid === messageCid || !isOnMobile) && (
+          <div
+            className="message-cid ai-agent-message-cid"
+            onClick={() => {
+              window.open(`${MESSAGE_URL}${messageCid}`, "_blank");
+            }}
+          >
+            <img src={icCopy} alt="" width={12} height={12} />
+            {messageCid.slice(0, 6)}...{messageCid.slice(-4)}
+          </div>
+        )}
       </div>
     ),
-    [],
-  )
+    [activeMessageCid, isOnMobile]
+  );
 
   const items = useMemo(() => {
-    return messages.map(({ id, message, status }) => ({
-      key: id,
-      loading: false,
-      role: status === 'local' ? 'local' : 'ai',
-      content: <CustomBubble content={message} />,
-    }))
-  }, [messages, CustomBubble])
+    return (messages as CustomMessageInfo[]).map(
+      ({ id, message, status, messageCid = "" }) => ({
+        key: id,
+        typing: status === "ai" ? { 
+          step: 1,
+          interval: 30,
+          enabled: true
+        } : undefined,
+        loading: status === "loading",
+        role: status === "local" ? "local" : "ai",
+        content: <CustomBubble content={message} messageCid={messageCid} />,
+      })
+    );
+  }, [messages, CustomBubble]);
 
   // Effects
   useEffect(() => {
-    const checkMobile = () => setIsOnMobile(window.innerWidth < MOBILE_BREAKPOINT)
-    checkMobile()
-    window.addEventListener('resize', checkMobile)
+    const checkMobile = () =>
+      setIsOnMobile(window.innerWidth < MOBILE_BREAKPOINT);
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
 
-    return () => window.removeEventListener('resize', checkMobile)
-  }, [])
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
 
   useEffect(() => {
     if (did) {
       getEnsSocialAccounts(did).then((res) => {
-        setEnsSocialAccounts(res)
-      })
+        setEnsSocialAccounts(res);
+      });
     }
-  }, [did])
+  }, [did]);
 
   useEffect(() => {
     if (hasBlog) {
-      queryFeedList()
+      queryFeedList();
     }
-  }, [hasBlog, queryFeedList])
+  }, [hasBlog, queryFeedList]);
 
   const contentTabWidth = useMemo(() => {
     if (isOnMobile) {
-      return '100%'
+      return "100%";
     }
-    return hasBlog ? '400px' : '200px'
-  }, [hasBlog, isOnMobile])
+    return hasBlog ? "400px" : "200px";
+  }, [hasBlog, isOnMobile]);
   const chatTabWidth = useMemo(() => {
     if (!hasBlog) {
-      return '100%'
+      return "100%";
     }
-    return '50%'
-  }, [hasBlog])
+    return "50%";
+  }, [hasBlog]);
 
   return (
     <>
-      <div className='ai-agent-ert-effect'></div>
-      <div className='ai-agent-container'>
-        <div className='agent-header'>
-          <div className='agent-info'>
-            <img src={avatar} alt='avatar' className='agent-avatar' />
-            <div className='agent-details'>
-              <h2 className='agent-name ai-agent-flicker'>{name}</h2>
-              <div className='agent-social-accounts'>
+      <div className="ai-agent-ert-effect"></div>
+      <div className="ai-agent-container">
+        <div className="agent-header">
+          <div className="agent-info">
+            <img src={avatar} alt="avatar" className="agent-avatar" />
+            <div className="agent-details">
+              <h2 className="agent-name ai-agent-flicker">{name}</h2>
+              <div className="agent-social-accounts">
                 {ensSocialAccounts.twitter && (
                   <img
                     src={icTwitter}
-                    onClick={() => window.open(`https://x.com/${ensSocialAccounts.twitter}`, '_blank')}
-                    alt='twitter'
+                    onClick={() =>
+                      window.open(
+                        `https://x.com/${ensSocialAccounts.twitter}`,
+                        "_blank"
+                      )
+                    }
+                    alt="twitter"
                   />
                 )}
                 {ensSocialAccounts.telegram && (
                   <img
                     src={icTelegram}
-                    onClick={() => window.open(`https://t.me/${ensSocialAccounts.telegram}`, '_blank')}
-                    alt='telegram'
+                    onClick={() =>
+                      window.open(
+                        `https://t.me/${ensSocialAccounts.telegram}`,
+                        "_blank"
+                      )
+                    }
+                    alt="telegram"
                   />
                 )}
                 {ensSocialAccounts.github && (
                   <img
                     src={icGithub}
-                    onClick={() => window.open(`https://github.com/${ensSocialAccounts.github}`, '_blank')}
-                    alt='github'
+                    onClick={() =>
+                      window.open(
+                        `https://github.com/${ensSocialAccounts.github}`,
+                        "_blank"
+                      )
+                    }
+                    alt="github"
                   />
                 )}
-              </div>
+                {ensSocialAccounts.farcaster && (
+                  <img
+                    src={icFarcaster}
+                    onClick={() =>
+                      window.open(
+                        `https://wrapcaset.com/${ensSocialAccounts.farcaster}`,
+                        "_blank"
+                      )
+                    }
+                    alt="farcaster"
+                  />
+                )}
+              </div>  
               {!isOnMobile && (
                 <div>
-                  <p className='agent-desc ai-agent-flicker'>{functionDesc}</p>
-                  <div className='agent-details-btn' onClick={() => setIsModalOpen(true)}>
+                  <p className="agent-desc ai-agent-flicker">{functionDesc}</p>
+                  <div
+                    className="agent-details-btn"
+                    onClick={() => setIsModalOpen(true)}
+                  >
                     <span>View Details</span>
-                    <img src={icJump} alt='' style={{ width: '26px', marginLeft: '8px' }} />
+                    <img
+                      src={icJump}
+                      alt=""
+                      style={{ width: "26px", marginLeft: "8px" }}
+                    />
                   </div>
                 </div>
               )}
@@ -262,59 +388,81 @@ const Independent: React.FC = () => {
           </div>
           {isOnMobile && (
             <>
-              <p className='agent-desc ai-agent-flicker'>{functionDesc}</p>
-              <div className='agent-details-btn' onClick={() => setIsModalOpen(true)}>
+              <p className="agent-desc ai-agent-flicker">{functionDesc}</p>
+              <div
+                className="agent-details-btn"
+                onClick={() => setIsModalOpen(true)}
+              >
                 <span>View Details</span>
-                <img src={icJump} alt='' style={{ width: '26px', marginLeft: '8px' }} />
+                <img
+                  src={icJump}
+                  alt=""
+                  style={{ width: "26px", marginLeft: "8px" }}
+                />
               </div>
             </>
           )}
         </div>
-        <div className='content-container'>
-          <div className='content-tabs' style={{ width: contentTabWidth }}>
+        <div className="content-container">
+          <div className="content-tabs" style={{ width: contentTabWidth }}>
             {hasBlog && (
               <div
-                className={activeTab === 'feed' ? 'ai-agent-flicker active' : 'ai-agent-flicker'}
-                onClick={() => setActiveTab('feed')}
+                className={
+                  activeTab === "feed"
+                    ? "ai-agent-flicker active"
+                    : "ai-agent-flicker"
+                }
+                onClick={() => setActiveTab("feed")}
               >
                 Feed
               </div>
             )}
             <div
-              className={`${!hasBlog && isOnMobile ? 'showBorderBottom' : ''} ${
-                activeTab === 'chat' ? 'ai-agent-flicker active' : 'ai-agent-flicker'
+              className={`${!hasBlog && isOnMobile ? "showBorderBottom" : ""} ${
+                activeTab === "chat"
+                  ? "ai-agent-flicker active"
+                  : "ai-agent-flicker"
               }`}
               style={{ width: chatTabWidth }}
-              onClick={() => setActiveTab('chat')}
+              onClick={() => setActiveTab("chat")}
             >
               Chat
             </div>
           </div>
 
-          <div className='tabs-content-splitter'></div>
-          <div className='content-wrapper'>
+          <div className="tabs-content-splitter"></div>
+          <div className="content-wrapper">
             {/* feed */}
-            <div style={{ display: activeTab === 'feed' ? 'block' : 'none' }} className='feed-container'>
+            <div
+              style={{ display: activeTab === "feed" ? "block" : "none" }}
+              className="feed-container"
+            >
               {feedLoading ? (
-                <div className='feed-loading'>
-                  <div className='loader'></div>
-                  <div className='feed-loading-text'>Loading</div>
+                <div className="feed-loading">
+                  <div className="loader"></div>
+                  <div className="feed-loading-text">Loading</div>
                 </div>
               ) : (
                 <>
                   {feedList.length > 0 ? (
                     feedList.map((item: any, index: number) => (
                       <div key={index}>
-                        <div className='feed-item'>
-                          <div className='feed-item-title'>{item.title}</div>
-                          <div>{item.content}</div>
+                        <div className="feed-item">
+                          <div className="feed-item-title">{item.title}</div>
+                          <div
+                            dangerouslySetInnerHTML={{
+                              __html: item.content.replace(/\n/g, "<br/>"),
+                            }}
+                          ></div>
                         </div>
-                        {index !== feedList.length - 1 && <div className='feed-item-divider'></div>}
+                        {index !== feedList.length - 1 && (
+                          <div className="feed-item-divider"></div>
+                        )}
                       </div>
                     ))
                   ) : (
-                    <div className='feed-empty'>
-                      <img src={icEmpty} alt='' />
+                    <div className="feed-empty">
+                      <img src={icEmpty} alt="" />
                       <div>No Content</div>
                     </div>
                   )}
@@ -324,18 +472,18 @@ const Independent: React.FC = () => {
             {/* chat */}
             <div
               ref={chatContainerRef}
-              style={{ display: activeTab === 'chat' ? 'block' : 'none' }}
-              className='chat-container'
+              style={{ display: activeTab === "chat" ? "block" : "none" }}
+              className="chat-container"
             >
-              <Bubble.List items={items} roles={roles} className='messages' />
-              <div className='sender'>
+              <Bubble.List items={items} roles={roles} className="messages" />
+              <div className="sender">
                 <input
                   ref={inputRef}
-                  placeholder='Send a message, and I will chat with you.'
-                  className='sender-input'
+                  placeholder="Send a message, and I will chat with you."
+                  className="sender-input"
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      onSubmit()
+                    if (e.key === "Enter") {
+                      onSubmit();
                     }
                   }}
                   onCompositionStart={() => setIsComposing(true)}
@@ -344,9 +492,15 @@ const Independent: React.FC = () => {
                 <Button
                   loading={agent.isRequesting()}
                   onClick={() => onSubmit()}
-                  type='primary'
-                  className='sender-btn'
-                  icon={<img src={icSend} alt='' style={{ width: 16, height: 16 }} />}
+                  type="primary"
+                  className="sender-btn"
+                  icon={
+                    <img
+                      src={icSend}
+                      alt=""
+                      style={{ width: 16, height: 16 }}
+                    />
+                  }
                 ></Button>
               </div>
             </div>
@@ -354,72 +508,97 @@ const Independent: React.FC = () => {
         </div>
 
         <Modal
-          title={<div className='ai-agent-flicker'>AI Agent Details</div>}
+          title={<div className="ai-agent-flicker">AI Agent Details</div>}
           open={isModalOpen}
           onCancel={() => setIsModalOpen(false)}
           footer={null}
-          width={'85%'}
+          width={"85%"}
           centered
-          closeIcon={<img src={icClose} alt='' style={{ width: '24px', height: '24px' }} />}
-          getContainer={() => document.querySelector('.ai-agent-container') as HTMLElement}
+          closeIcon={
+            <img
+              src={icClose}
+              alt=""
+              style={{ width: "24px", height: "24px" }}
+            />
+          }
+          getContainer={() =>
+            document.querySelector(".ai-agent-container") as HTMLElement
+          }
         >
-          <div className='agent-details-modal ai-agent-flicker'>
-            <div className='avatar-section'>
-              <img src={avatar || DEFAULT_CONFIG.avatar} alt='avatar' />
-              <h3 className='agent-modal-name'>{name}</h3>
+          <div className="agent-details-modal ai-agent-flicker">
+            <div className="avatar-section">
+              <img src={avatar || DEFAULT_CONFIG.avatar} alt="avatar" />
+              <h3 className="agent-modal-name">{name}</h3>
             </div>
-            <div className='agent-details-divider'></div>
-            <div className='detail-item'>
+            <div className="agent-details-divider"></div>
+            <div className="detail-item">
               <h4>Agent Intro:</h4>
               <p>{functionDesc}</p>
             </div>
-            <div className='detail-item'>
-              <h4>Agent Description Prompt:</h4>
+            <div className="detail-item">
+              <h4>Chat Description Prompt:</h4>
               <Tooltip
                 title={
-                  <div style={{ cursor: 'pointer' }} onClick={() => copyToClipboard(behaviorDesc)}>
-                    {isCopied ? 'Copied!' : 'Click To Copy'}
+                  <div
+                    style={{ cursor: "pointer" }}
+                    onClick={() => copyToClipboard(behaviorDesc)}
+                  >
+                    {isCopied ? "Copied!" : "Click To Copy"}
                   </div>
                 }
-                getPopupContainer={() => document.querySelector('.agent-details-modal') as HTMLElement}
-                placement='topRight'
+                getPopupContainer={() =>
+                  document.querySelector(".agent-details-modal") as HTMLElement
+                }
+                placement="topRight"
                 mouseEnterDelay={0}
                 onOpenChange={(open) => {
                   if (open) {
-                    setIsCopied(false)
+                    setIsCopied(false);
                   }
                 }}
               >
-                <p onClick={() => copyToClipboard(behaviorDesc)} style={{ cursor: 'pointer' }}>
+                <p
+                  onClick={() => copyToClipboard(behaviorDesc)}
+                  style={{ cursor: "pointer" }}
+                >
                   {behaviorDesc}
                 </p>
               </Tooltip>
             </div>
             {blogPrompt && (
-              <div className='detail-item'>
+              <div className="detail-item">
                 <h4>Blog Description Prompt:</h4>
                 <Tooltip
                   title={
-                    <div style={{ cursor: 'pointer' }} onClick={() => copyToClipboard(blogPrompt)}>
-                      {isCopied ? 'Copied!' : 'Click To Copy'}
+                    <div
+                      style={{ cursor: "pointer" }}
+                      onClick={() => copyToClipboard(blogPrompt)}
+                    >
+                      {isCopied ? "Copied!" : "Click To Copy"}
                     </div>
                   }
-                  getPopupContainer={() => document.querySelector('.agent-details-modal') as HTMLElement}
-                  placement='topRight'
+                  getPopupContainer={() =>
+                    document.querySelector(
+                      ".agent-details-modal"
+                    ) as HTMLElement
+                  }
                   mouseEnterDelay={0}
                   onOpenChange={(open) => {
                     if (open) {
-                      setIsCopied(false)
+                      setIsCopied(false);
                     }
                   }}
                 >
-                  <p onClick={() => copyToClipboard(blogPrompt)} style={{ cursor: 'pointer' }}>
+                  <p
+                    onClick={() => copyToClipboard(blogPrompt)}
+                    style={{ cursor: "pointer" }}
+                  >
                     {blogPrompt}
                   </p>
                 </Tooltip>
               </div>
             )}
-            <div className='detail-item'>
+            <div className="detail-item">
               <h4>DID:</h4>
               <p>{did}</p>
             </div>
@@ -427,7 +606,7 @@ const Independent: React.FC = () => {
         </Modal>
       </div>
     </>
-  )
-}
+  );
+};
 
-export default Independent
+export default Independent;

@@ -23,6 +23,7 @@ export const enum ENetwork {
   FileCoin = 314,
   Mantle = 5000,
   Scroll = 534352,
+  Solana = 101,
 }
 
 export const networks: INetwork[] = [
@@ -41,6 +42,14 @@ export const networks: INetwork[] = [
     unit: "ETH",
     unitName: 18,
     // https://etherscan.io/address/0x29e78bfd54c15c811bdd6560c10215c0ef687966
+    contractAddr: "0x071e5993a7fa46ccaa7135ff07e840c7b9c5073c",
+  },
+  {
+    label: "Solana",
+    value: ENetwork.Solana,
+    price: 0.01,
+    unit: "SOL",
+    unitName: 9,
     contractAddr: "0x071e5993a7fa46ccaa7135ff07e840c7b9c5073c",
   },
 ];

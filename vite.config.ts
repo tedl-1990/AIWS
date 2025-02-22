@@ -1,9 +1,9 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
-import basicSsl from '@vitejs/plugin-basic-ssl'
 
-export default defineConfig({
+// 根据命令区分环境
+export default defineConfig(({ command }) => ({
   base: './',
   // , basicSsl()
   plugins: [react()],
@@ -32,6 +32,10 @@ export default defineConfig({
       },
     ],
   },
+  define: {
+    // 根据命令设置环境变量
+    'process.env.NODE_ENV': JSON.stringify(command === 'build' ? 'production' : 'development')
+  },
   build: {
     outDir: 'dist',
     assetsDir: './',
@@ -41,4 +45,4 @@ export default defineConfig({
       },
     },
   },
-})
+}))

@@ -3,7 +3,8 @@
  */
 
 // import { getChatCompletionsStream } from "./api";
-import { getChatCompletions } from "./api";
+import { getChatCompletionsStream, uploadMessage } from "./api";
+import { createAvatarCid, createJsonFile } from "./upload";
 
 /**
  * Declare global window.aiData type
@@ -32,6 +33,32 @@ const removeQuotes = (text: string): string => {
   return text.replace(/^["'""]|["'""]$/g, "").trim();
 };
 
+interface ICalculateCidData {
+  message: string;
+  prev_message_cid: string;
+  role: 0 | 1;
+  agent_id: string;
+  ens: string;
+  session: string;
+}
+
+export const calculateCid = async (
+  data: ICalculateCidData
+): Promise<string> => {
+  const json = {
+    message: data.message,
+    session: data.session,
+    create_time: Date.now(),
+    prev_message_cid: data.prev_message_cid,
+    role: data.role,
+    agent_id: data.agent_id,
+    ens: data.ens,
+  };
+  const jsonFile = await createJsonFile(json);
+  const ipfsHashCid = await createAvatarCid(jsonFile);
+  return ipfsHashCid[0].cid;
+};
+
 /**
  * Send message to AI and get response
  * @param message User's message
@@ -40,57 +67,145 @@ const removeQuotes = (text: string): string => {
 export const sendMessage = async (
   message: string,
   sessionId: string,
-  onProgress?: (text: string) => void,
-  onFinish?: (text: string) => void
+  onSend?: (text: string, messageCid: string) => void,
+  onProgress?: (text: string, messageCid: string) => void,
+  onFinish?: (text: string, messageCid: string) => void
 ) => {
   try {
     if (message.length === 0) {
       return;
     }
-    const agent_id =
-      window.aiData?.agentId || window.aiData?.id || "Vi2L02VaH8HZG5MmaUH9B";
+    const agent_id = window.aiData?.agentId || window.aiData?.id || "l5_pEJ6aAydRl8c0KQsIH";
+    const did = window.aiData?.did || "test.agent";
+
     // Get current conversation history
     const history = conversationHistories[currentConversationId] || [];
-    // Initialize new conversation
-    if (history.length === 0 && window.aiData?.behaviorDesc) {
-      history.push({
-        role: "system",
-        content: window.aiData.behaviorDesc,
-      });
-    }
 
-    history.push({ role: "user", content: message });
-
-    // Call API with stream option
-    const { messages } = await getChatCompletions({
-      input: {
-        agent_id: String(agent_id),
-        messages: [
-          {
-            content: message || "",
-          },
-        ],
-        thread_id: sessionId,
-      },
+    const message_cid = await calculateCid({
+      message: message,
+      prev_message_cid: history[history.length - 1]?.messageCid || "",
+      role: 0,
+      agent_id: agent_id,
+      ens: did,
+      session: sessionId,
     });
-    const fullResponse = messages[0].content;
-    onProgress?.(fullResponse);
-    console.log(fullResponse, "fullResponse");
-    onFinish?.(fullResponse);
+    onSend?.(message, message_cid);
 
-    // Remove quotes from response
-    const cleanResponse = removeQuotes(fullResponse);
+    uploadMessage({
+      agent_id: String(agent_id),
+      ens: did,
+      message: message,
+      message_cid: message_cid,
+      prev_message_cid: history[history.length - 1]?.messageCid || "",
+      role: 0,
+      session: sessionId,
+    });
 
-    // Update conversation history
-    history.push({ role: "assistant", content: cleanResponse });
-    conversationHistories[currentConversationId] = history;
+    history.push({ role: "user", content: message, messageCid: message_cid });
 
-    return cleanResponse;
+    let fullResponse = '';
+    const tempMessageCid = 'loading_message_cid'; // Temporary messageCid
+
+    await getChatCompletionsStream(
+      {
+        input: {
+          agent_id: String(agent_id),
+          messages: [{ content: message || "" }],
+          thread_id: sessionId,
+        },
+      },
+      {
+        onMessage: (content) => {
+          fullResponse += content;
+          const cleanResponse = removeQuotes(fullResponse);
+          
+          // Find if message already exists
+          const existingMessageIndex = history.findIndex(msg => msg.messageCid === tempMessageCid);
+          if (existingMessageIndex !== -1) {
+            // Update existing message content
+            history[existingMessageIndex].content = cleanResponse;
+          } else {
+            // Add new message
+            history.push({
+              role: "assistant",
+              content: cleanResponse,
+              messageCid: tempMessageCid,
+            });
+          }
+          
+          conversationHistories[currentConversationId] = history;
+          onProgress?.(fullResponse, tempMessageCid);
+        },
+        onComplete: async () => {
+          const cleanResponse = removeQuotes(fullResponse);
+          
+          // Calculate real messageCid
+          const response_cid = await calculateCid({
+            message: cleanResponse,
+            prev_message_cid: message_cid,
+            role: 1,
+            agent_id: agent_id,
+            ens: did,
+            session: sessionId,
+          });
+
+          // Replace temporary messageCid
+          const messageIndex = history.findIndex(msg => msg.messageCid === tempMessageCid);
+          if (messageIndex !== -1) {
+            history[messageIndex].messageCid = response_cid;
+          }
+          
+          conversationHistories[currentConversationId] = history;
+          onFinish?.(fullResponse, response_cid);
+
+          uploadMessage({
+            agent_id: String(agent_id),
+            ens: did,
+            message: cleanResponse,
+            message_cid: response_cid,
+            prev_message_cid: message_cid,
+            role: 1,
+            session: sessionId,
+          });
+        },
+        onError: (error) => {
+          throw error;
+        },
+        onTimeout: () => {
+          throw new Error("Request timeout");
+        }
+      }
+    );
+
+    return fullResponse;
   } catch (error) {
     console.error("Error sending message:", error);
     const errorMessage = "Sorry, an error occurred. Please try again later.";
     const history = conversationHistories[currentConversationId] || [];
-    history.push({ role: "assistant", content: errorMessage });
+    const agent_id = window.aiData?.agentId || window.aiData?.id || "dgl6Ez4ZKOu5GczMN3veC";
+    const did = window.aiData?.did || "test.agent";
+    const error_cid = await calculateCid({
+      message: errorMessage,
+      prev_message_cid: history[history.length - 1]?.messageCid || "",
+      role: 1,
+      agent_id: agent_id,
+      ens: did,
+      session: sessionId,
+    });
+    uploadMessage({
+      agent_id: String(agent_id),
+      ens: did,
+      message: errorMessage,
+      message_cid: error_cid,
+      prev_message_cid: history[history.length - 1]?.messageCid || "",
+      role: 1,
+      session: sessionId,
+    });
+    history.push({
+      role: "assistant",
+      content: errorMessage,
+      messageCid: error_cid,
+    });
     conversationHistories[currentConversationId] = history;
     throw error;
   }
@@ -101,7 +216,11 @@ export const sendMessage = async (
  */
 const conversationHistories: Record<
   string,
-  Array<{ role: "system" | "user" | "assistant"; content: string }>
+  Array<{
+    role: "system" | "user" | "assistant";
+    content: string;
+    messageCid: string;
+  }>
 > = {};
 
 /**
@@ -122,6 +241,7 @@ export const setCurrentConversation = (conversationId: string) => {
       conversationHistories[conversationId].push({
         role: "system",
         content: window.aiData.behaviorDesc,
+        messageCid: "",
       });
     }
   }

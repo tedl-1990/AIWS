@@ -13,6 +13,7 @@ import {
 import { readFileAsUint8Array } from "@/utils";
 import { nanoid } from "nanoid";
 import { StepData } from "@/types";
+
 // Glitter IPFS API endpoint
 const GLITTER_IPFS_API_URL = "https://ipfs.glitterprotocol.dev/api/v0";
 // RPC
@@ -41,9 +42,10 @@ export interface IAgentData {
   avatar?: string;
   id?: string;
   agentId: string;
+  network: string;
 }
 
-interface IFile {
+export interface IFile {
   filename: string;
   contenthash: string;
   filesize: number;
@@ -59,6 +61,7 @@ export interface IRecord {
   agent_name: string;
   agent_intro: string;
   avatar: string;
+  network: ENetwork;
 }
 
 // get Provider
@@ -80,6 +83,56 @@ const getProvider = async (needSigner = false) => {
   return new ethers.providers.JsonRpcProvider(MAINNET_RPC);
 };
 
+export const getAllSolanaRecords = async (): Promise<{
+  total: number;
+  records: IRecord[];
+}> => {
+  try {
+    const provider = await getProvider();
+    const network = await provider.getNetwork();
+    if (Number(network.chainId) !== ENetwork.Solana) {
+      const { status } = await switchNetworkMetaMask(ENetwork.Solana);
+      if (status) {
+        console.log("switch network success");
+        return getAllSolanaRecords();
+      }
+    }
+    const contractAddress = networks.find(
+      (item: INetwork) => item.value === Number(network.chainId)
+    )?.contractAddr;
+    if (!contractAddress) throw new Error("Contract address not found");
+    const contract = new ethers.Contract(contractAddress, UPLOAD_ABI, provider);
+    const count = await contract.getRecordCount();
+    if (count === 0) {
+      return {
+        total: 0,
+        records: [],
+      };
+    }
+    const records = await contract.fetchData(0, count);
+    const formattedRecords: IRecord[] = records
+      .map((record: any) => ({
+        did: record.ensName,
+        contenthash: record.contenthash,
+        timestamp: record.timestamp?.toNumber(),
+        creator_address: record.creator_address,
+        avatar: record.avatarContentHash,
+        agent_name: record.agent_name,
+        agent_intro: record.agent_intro,
+        optionalField: record.optionalField,
+        extension: record.extension,
+      }))
+      .sort((a: IRecord, b: IRecord) => b.timestamp - a.timestamp);
+    return {
+      total: count.toNumber(),
+      records: formattedRecords,
+    };
+  } catch (error) {
+    console.error("Get records error:", error);
+    throw error;
+  }
+};
+
 export const getAllRecords = async (): Promise<{
   total: number;
   records: IRecord[];
@@ -87,7 +140,7 @@ export const getAllRecords = async (): Promise<{
   try {
     const provider = await getProvider();
     const network = await provider.getNetwork();
-    if (network.chainId !== ENetwork.Ethereum) {
+    if (Number(network.chainId) !== ENetwork.Ethereum) {
       const { status } = await switchNetworkMetaMask(ENetwork.Ethereum);
       if (status) {
         console.log("switch network success");
@@ -95,7 +148,7 @@ export const getAllRecords = async (): Promise<{
       }
     }
     const contractAddress = networks.find(
-      (item: INetwork) => item.value === network.chainId
+      (item: INetwork) => item.value === Number(network.chainId)
     )?.contractAddr;
     if (!contractAddress) throw new Error("Contract address not found");
     const contract = new ethers.Contract(contractAddress, UPLOAD_ABI, provider);
@@ -111,19 +164,20 @@ export const getAllRecords = async (): Promise<{
 
       // get all records
       const records = await contract.fetchData(0, count);
-
+      console.log(records, "records");
       // format records
       const formattedRecords: IRecord[] = records
         .map((record: any) => ({
           did: record.ensName,
           contenthash: record.contenthash,
-          timestamp: record.timestamp.toNumber(),
+          timestamp: record.timestamp?.toNumber(),
           creator_address: record.creator_address,
           avatar: record.avatarContentHash,
           agent_name: record.agent_name,
           agent_intro: record.agent_intro,
           optionalField: record.optionalField,
           extension: record.extension,
+          network: ENetwork.Ethereum,
         }))
         .sort((a: IRecord, b: IRecord) => b.timestamp - a.timestamp);
       return {
@@ -149,7 +203,7 @@ export const getAllRecords = async (): Promise<{
  * @param onProgress Progress callback
  * @returns Upload response
  */
-const uploadToGlitter = async (
+export const uploadToGlitter = async (
   fileList: File[],
   txId: string,
   chainId: string,
@@ -214,7 +268,7 @@ export const ipfsUnixfsImporterBlock = {
   },
 };
 
-const createAvatarCid = async (file: File) => {
+export const createAvatarCid = async (file: File) => {
   const avatarCid = [];
   const { content: uint8Array } = await readFileAsUint8Array(file);
 
@@ -241,7 +295,7 @@ const createAvatarCid = async (file: File) => {
  * @param content HTML content string
  * @returns HTML File object
  */
-const createHtmlFile = async (content: string): Promise<File> => {
+export const createHtmlFile = async (content: string): Promise<File> => {
   try {
     const blob = new Blob([content], { type: "text/html" });
     const file = new File([blob], "index.html", {
@@ -261,7 +315,7 @@ const createHtmlFile = async (content: string): Promise<File> => {
  * @param content JSON content string
  * @returns JSON File object
  */
-const createJsonFile = async (content: object): Promise<File> => {
+export const createJsonFile = async (content: object): Promise<File> => {
   try {
     const jsonString = JSON.stringify(content, null, 2);
     const blob = new Blob([jsonString], { type: "application/json" });
@@ -277,7 +331,7 @@ const createJsonFile = async (content: object): Promise<File> => {
   }
 };
 
-const uploadFolderToIPFS = async (dirFileList: File[]) => {
+export const uploadFolderToIPFS = async (dirFileList: File[]) => {
   const list: IFile[] = [];
   const folderName = `agent_${Date.now()}`;
 
@@ -323,7 +377,7 @@ interface IRecordDataParam {
   optionalField: string;
 }
 
-interface IUploadData {
+export interface IUploadData {
   name: string;
   avatar: File;
   functionDesc: string;
@@ -349,10 +403,10 @@ export const createContractRecord = async (
 }> => {
   try {
     const provider = await getProvider(true);
-    const signer = provider.getSigner();
+    const signer = await provider.getSigner();
     const network = await provider.getNetwork();
 
-    if (network.chainId !== ENetwork.Ethereum) {
+    if (Number(network.chainId) !== ENetwork.Ethereum) {
       const { status } = await switchNetworkMetaMask(ENetwork.Ethereum);
       if (!status) {
         throw new Error("Failed to switch network");
@@ -360,7 +414,7 @@ export const createContractRecord = async (
     }
 
     const contractAddress = networks.find(
-      (item: INetwork) => item.value === ENetwork.Ethereum
+      (item: INetwork) => item.value === Number(network.chainId)
     )?.contractAddr;
 
     if (!contractAddress) throw new Error("Contract address not found");
@@ -375,6 +429,7 @@ export const createContractRecord = async (
       functionDesc: formData.functionDesc,
       behaviorDesc: formData.behaviorDesc,
       did: formData.did,
+      network: "ETH",
       dataset: formData.dataset,
       blogPrompt: formData.blogPrompt,
       hasBlog: formData.hasBlog,
@@ -390,6 +445,7 @@ export const createContractRecord = async (
       agent_avatar: avatarCid[0].cid,
       agent_intro: formData.functionDesc,
       did: formData.did,
+      network: "ETH",
       detail: {
         chat_prompt: formData.behaviorDesc,
         chat_dataset: formData.dataset,
@@ -453,6 +509,7 @@ export const createContractRecord = async (
 // step 2: upload to IPFS
 export const uploadToIPFS = async (
   stepData: StepData,
+  network: string,
   onProgress?: (percent: number) => void
 ): Promise<{ contentHash: string; avatarHash: string }> => {
   try {
@@ -467,7 +524,7 @@ export const uploadToIPFS = async (
     const glitterHash = await uploadToGlitter(
       dirFileList,
       contractData.txHash,
-      "1", // Ethereum mainnet
+      network, // Ethereum mainnet
       onProgress
     );
 
@@ -486,7 +543,7 @@ export const uploadToIPFS = async (
  * @param data Agent data
  * @returns Generated HTML string
  */
-const generateHTML = (data: IAgentData) => {
+export const generateHTML = (data: IAgentData) => {
   const avatarUrl =
     typeof data.avatar === "string" && data.avatar
       ? data.avatar.startsWith("http")
@@ -505,6 +562,7 @@ const generateHTML = (data: IAgentData) => {
     hasRAG: data.hasRAG,
     avatar: avatarUrl,
     agentId: data.agentId,
+    network: data.network,
   };
 
   const htmlString = `

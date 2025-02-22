@@ -4,12 +4,8 @@ import { encode } from "@ensdomains/content-hash";
 import { createEnsPublicClient } from "@ensdomains/ensjs";
 import { mainnet } from "viem/chains";
 import { http } from "viem";
-import { switchNetworkMetaMask } from "./network";
+import { ENetwork, switchNetworkMetaMask } from "./network";
 
-// Mainnet configuration
-const MAINNET_CHAIN_ID = 1;
-// const MAINNET_RPC_URL =
-//   "https://eth-mainnet.g.alchemy.com/v2/UbtuzKb8VNANh8a-B0g0tNU7sXrjwZS6";
 const ENS_ADDRESS = "0x00000000000c2e074ec69a0dfb2997ba6c7d2e1e";
 
 const ENS_ABI = [
@@ -34,12 +30,12 @@ export const setEnsRecord = async (ensName: string, ipfsHash: string) => {
 
     // Check and switch network
     const network = await provider.getNetwork();
-    if (network.chainId !== MAINNET_CHAIN_ID) {
-      await switchNetworkMetaMask(MAINNET_CHAIN_ID);
+    if (network.chainId !== ENetwork.Ethereum) {
+      await switchNetworkMetaMask(ENetwork.Ethereum);
     }
 
     await provider.send("eth_requestAccounts", []);
-    const signer = provider.getSigner();
+    const signer = await provider.getSigner();
 
     const namehash = ethers.utils.namehash(ensName);
 
@@ -89,7 +85,7 @@ export const getUserENSDomains = async (address: string): Promise<string[]> => {
     const provider = new ethers.providers.Web3Provider(window.ethereum);
 
     const network = await provider.getNetwork();
-    if (network.chainId !== 1) {
+    if (network.chainId !== ENetwork.Ethereum) {
       console.warn("Please switch to Ethereum mainnet");
       return [];
     }
@@ -125,7 +121,9 @@ export const getUserENSDomains = async (address: string): Promise<string[]> => {
 const createSharedEnsClient = () =>
   createEnsPublicClient({
     chain: mainnet,
-    transport: http(),
+    transport: http(
+      "https://eth-mainnet.g.alchemy.com/v2/omJBXWIY1zRbJPFZziPcaWLckUpBER7L"
+    ),
     pollingInterval: 1000,
     batch: {
       multicall: {
@@ -186,15 +184,21 @@ export async function getAllOwnedENSDomains(
  * @param ensName ENS name
  * @returns Object containing social accounts
  */
-export const getEnsSocialAccounts = async (ensName: string) => {
-  
+export const getEnsSocialAccounts = async (
+  ensName: string
+): Promise<{
+  twitter: string;
+  telegram: string;
+  github: string;
+  farcaster: string;
+}> => {
   try {
-    console.log(ensName, "ensName");
     if (!ensName) {
       return {
         twitter: "",
         telegram: "",
         github: "",
+        farcaster: "",
       };
     }
     const client = await createSharedEnsClient();
@@ -214,11 +218,16 @@ export const getEnsSocialAccounts = async (ensName: string) => {
       name: ensName,
       key: "com.github",
     });
+    const farcaster = await client.getTextRecord({
+      name: ensName,
+      key: "xyz.farcaster",
+    });
 
     return {
       twitter: twitter || "",
       telegram: telegram || "",
       github: github || "",
+      farcaster: farcaster || "",
     };
   } catch (error) {
     console.error("Failed to get ENS social accounts:", error);
@@ -226,6 +235,7 @@ export const getEnsSocialAccounts = async (ensName: string) => {
       twitter: "",
       telegram: "",
       github: "",
+      farcaster: "",
     };
   }
 };

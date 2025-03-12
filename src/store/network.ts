@@ -14,3 +14,8 @@ export const networkState = atom<ENetwork>({
   default:
     (Number(localStorage.getItem("network_type")) as ENetwork) || UrlNetwork(),
 });
+
+export const isWalletConnectedState = atom<boolean>({
+  key: "isWalletConnectedState",
+  default: !!localStorage.getItem("Authentication-Tokens"),
+});

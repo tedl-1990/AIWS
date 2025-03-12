@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unused-vars */
 /**
  * AI Agent Publication Component
  * Allows users to create and publish new AI agents
@@ -17,6 +16,8 @@ import {
   Steps,
   Checkbox,
   CheckboxChangeEvent,
+  Modal,
+  Tooltip,
 } from "antd";
 import { UploadOutlined } from "@ant-design/icons";
 import type { RcFile } from "antd/es/upload/interface";
@@ -25,6 +26,12 @@ import { uploadToIPFS } from "@/services/upload";
 import { ENetwork } from "@/services/network";
 import { PublishStep, StepData, FormValues } from "@/types";
 import { WalletService } from "@/services/wallet";
+import x from "@/assets/images/x.png";
+import tg from "@/assets/images/tg.png";
+import farcaster from "@/assets/images/farcaster.png";
+import discord from "@/assets/images/discord.png";
+import { useRecoilState } from "recoil";
+import { isWalletConnectedState } from "@/store/network";
 const { TextArea } = Input;
 
 /**
@@ -49,6 +56,37 @@ const enum EDataset {
   WEB3NEWS = "Web3 News",
   DAILYFEEDS = "Dailyfeeds",
   COINGECKO = "Coingecko",
+  KNOWLEDGEBASE = "KnowledgeBase",
+}
+
+// add social media type definition
+interface SocialMediaConfig {
+  [ESocialMedia.TWITTER]?: {
+    apiKey: string;
+    apiSecret: string;
+    accessToken: string;
+    accessTokenSecret: string;
+    userId: string;
+  };
+  [ESocialMedia.TELEGRAM]?: {
+    botToken: string;
+    chatId: string;
+  };
+  [ESocialMedia.FARCASER]?: {
+    apiKey: string;
+    username: string;
+  };
+  [ESocialMedia.DISCORD]?: {
+    webhookUrl: string;
+    botName: string;
+  };
+}
+
+enum ESocialMedia {
+  TWITTER = "twitter",
+  TELEGRAM = "telegram",
+  FARCASER = "farcaster",
+  DISCORD = "discord",
 }
 
 /**
@@ -74,10 +112,22 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
   });
   const walletService = WalletService.getInstance();
   const address = walletService.getWalletInfo()?.address;
+  const [isWalletConnected] = useRecoilState(isWalletConnectedState);
   const network = walletService.getCurrentNetwork();
   const [errorStep, setErrorStep] = useState<PublishStep | null>(null);
 
   const isFormDisabled = currentStep !== PublishStep.CONTRACT;
+
+  // add social media config
+  const [socialMediaConfig, setSocialMediaConfig] = useState<SocialMediaConfig>(
+    {}
+  );
+  const [currentMedia, setCurrentMedia] = useState<string | null>(null);
+  const [mediaModalVisible, setMediaModalVisible] = useState(false);
+  const [mediaForm] = Form.useForm();
+
+  // add dataset Form.useWatch
+  const datasetValue = Form.useWatch("dataset", form);
 
   /**
    * Validate and upload avatar before adding to form
@@ -135,6 +185,9 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
         blogPrompt: values.blogPrompt,
         hasBlog: values.blogPrompt ? true : false,
         hasRAG: values.chatConfig,
+        website: values.website,
+        website1: values.website1,
+        website2: values.website2,
       };
 
       setStepMessage(STEPS.CREATING_AGENT);
@@ -187,9 +240,32 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
       if (network === ENetwork.Solana) {
         chainId = "101";
       }
-      const result = await uploadToIPFS(stepData, chainId, (percent: any) => {
-        setStepMessage(`Uploading... ${percent}%`);
-      });
+
+      const socialMediaData = socialMediaConfig[ESocialMedia.TWITTER]
+        ? {
+            twitter_user_id:
+              socialMediaConfig[ESocialMedia.TWITTER].userId || "",
+            twitter_client_secret:
+              socialMediaConfig[ESocialMedia.TWITTER].apiSecret || "",
+            twitter_api_key:
+              socialMediaConfig[ESocialMedia.TWITTER].apiKey || "",
+            twitter_api_secret:
+              socialMediaConfig[ESocialMedia.TWITTER].apiSecret || "",
+            twitter_access_token:
+              socialMediaConfig[ESocialMedia.TWITTER].accessToken || "",
+            twitter_access_secret:
+              socialMediaConfig[ESocialMedia.TWITTER].accessTokenSecret || "",
+          }
+        : undefined;
+
+      const result = await uploadToIPFS(
+        stepData,
+        chainId,
+        socialMediaData,
+        (percent: any) => {
+          setStepMessage(`Uploading... ${percent}%`);
+        }
+      );
 
       if (!result || !result.contentHash) {
         throw new Error("Upload failed");
@@ -264,9 +340,15 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
   };
 
   const onFinish = async (values: FormValues) => {
+    // add social media config to values
+    const formValuesWithSocial = {
+      ...values,
+      socialMediaConfig,
+    };
+
     switch (currentStep) {
       case PublishStep.CONTRACT:
-        await handleContractStep(values);
+        await handleContractStep(formValuesWithSocial);
         break;
       case PublishStep.IPFS:
         await handleIpfsStep(stepData);
@@ -390,6 +472,231 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
     blogPrompt: undefined,
   };
 
+  // add media icon component
+  const SocialMediaIcon = ({
+    type,
+    onClick,
+    active,
+  }: {
+    type: ESocialMedia;
+    onClick: () => void;
+    active: boolean;
+  }) => {
+    const getIcon = () => {
+      switch (type) {
+        case ESocialMedia.TWITTER:
+          return (
+            <>
+              <img width={18} height={18} src={x} alt="twitter" />
+              <p className="social-media-title">Twitter</p>
+              <Button className="connect-button">
+                {active ? "Reconnect" : "Connect"}
+              </Button>
+            </>
+          );
+        case ESocialMedia.TELEGRAM:
+          return (
+            <>
+              <img width={18} height={18} src={tg} alt="telegram" />
+              <p className="social-media-title">Telegram</p>
+              <Button className="connect-button">
+                {active ? "Reconnect" : "Connect"}
+              </Button>
+            </>
+          );
+        case ESocialMedia.FARCASER:
+          return (
+            <>
+              <img width={18} height={18} src={farcaster} alt="farcaster" />
+              <p className="social-media-title">Farcaster</p>
+              <Button className="connect-button">
+                {active ? "Reconnect" : "Connect"}
+              </Button>
+            </>
+          );
+        case ESocialMedia.DISCORD:
+          return (
+            <>
+              <img width={18} height={18} src={discord} alt="discord" />
+              <p className="social-media-title">Discord</p>
+              <Button className="connect-button">
+                {active ? "Reconnect" : "Connect"}
+              </Button>
+            </>
+          );
+        default:
+          return null;
+      }
+    };
+
+    const getTooltipTitle = () => {
+      switch (type) {
+        case ESocialMedia.TWITTER:
+          return "Twitter";
+        case ESocialMedia.TELEGRAM:
+          return "Telegram";
+        case ESocialMedia.FARCASER:
+          return "Farcaster";
+        case ESocialMedia.DISCORD:
+          return "Discord";
+        default:
+          return "";
+      }
+    };
+
+    return (
+      <Tooltip title={getTooltipTitle()}>
+        <div
+          className={`social-media-icon ${active ? "active" : ""}`}
+          onClick={onClick}
+        >
+          {getIcon()}
+        </div>
+      </Tooltip>
+    );
+  };
+
+  // add media form fields config
+  const getMediaFormFields = (type: string) => {
+    switch (type) {
+      case ESocialMedia.TWITTER:
+        return (
+          <>
+            <Form.Item
+              label="API Key"
+              name="apiKey"
+              rules={[{ required: true, message: "Please input API Key!" }]}
+            >
+              <Input placeholder="Enter Twitter API Key" />
+            </Form.Item>
+            <Form.Item
+              label="API Secret"
+              name="apiSecret"
+              rules={[{ required: true, message: "Please input API Secret!" }]}
+            >
+              <Input.Password placeholder="Enter Twitter API Secret" />
+            </Form.Item>
+            <Form.Item
+              label="Access Token"
+              name="accessToken"
+              rules={[
+                { required: true, message: "Please input Access Token!" },
+              ]}
+            >
+              <Input placeholder="Enter Twitter Access Token" />
+            </Form.Item>
+            <Form.Item
+              label="Access Token Secret"
+              name="accessTokenSecret"
+              rules={[
+                {
+                  required: true,
+                  message: "Please input Access Token Secret!",
+                },
+              ]}
+            >
+              <Input.Password placeholder="Enter Twitter Access Token Secret" />
+            </Form.Item>
+            <Form.Item
+              label="User ID"
+              name="userId"
+              rules={[
+                {
+                  required: true,
+                  message: "Please input User ID !",
+                },
+              ]}
+            >
+              <Input placeholder="Enter Twitter User ID" />
+            </Form.Item>
+          </>
+        );
+      case ESocialMedia.TELEGRAM:
+        return (
+          <>
+            <Form.Item
+              label="Token"
+              name="token"
+              rules={[{ required: true, message: "Please input Token!" }]}
+            >
+              <Input placeholder="Enter Telegram Token" />
+            </Form.Item>
+            <Form.Item
+              label="User ID"
+              name="userId"
+              rules={[{ required: true, message: "Please input User ID!" }]}
+            >
+              <Input placeholder="Enter Telegram User ID" />
+            </Form.Item>
+          </>
+        );
+      case ESocialMedia.FARCASER:
+        return (
+          <>
+            <Form.Item
+              label="Neynar_api_key"
+              name="neynar_api_key"
+              rules={[{ required: true, message: "Please input API Key!" }]}
+            >
+              <Input placeholder="Enter Neynar API Key" />
+            </Form.Item>
+            <Form.Item
+              label="Signer UUID"
+              name="neynar_signer_uuid"
+              rules={[{ required: true, message: "Please input Signer UUID!" }]}
+            >
+              <Input placeholder="Enter Neynar Signer UUID" />
+            </Form.Item>
+            <Form.Item
+              label="User FID"
+              name="user_fid"
+              rules={[{ required: true, message: "Please input User FID!" }]}
+            >
+              <Input placeholder="Enter Farcaster User FID" />
+            </Form.Item>
+          </>
+        );
+      case ESocialMedia.DISCORD:
+        return (
+          <>
+            <Form.Item
+              label="Token"
+              name="token"
+              rules={[{ required: true, message: "Please input Token!" }]}
+            >
+              <Input placeholder="Enter Discord Token" />
+            </Form.Item>
+          </>
+        );
+      default:
+        return null;
+    }
+  };
+
+  // add handle function
+  const handleMediaIconClick = (type: ESocialMedia) => {
+    setCurrentMedia(type);
+    mediaForm.resetFields();
+
+    // if has config, fill form
+    if (socialMediaConfig[type]) {
+      mediaForm.setFieldsValue(socialMediaConfig[type]);
+    }
+
+    setMediaModalVisible(true);
+  };
+
+  const handleMediaFormSubmit = () => {
+    mediaForm.validateFields().then((values) => {
+      setSocialMediaConfig((prev) => ({
+        ...prev,
+        [currentMedia as string]: values,
+      }));
+      setMediaModalVisible(false);
+      message.success(`${currentMedia} configuration saved`);
+    });
+  };
+
   return (
     <div className="publish-container">
       <Steps
@@ -399,6 +706,7 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
           { title: "Upload IPFS" },
           { title: "Bind Domain" },
         ]}
+        className="publish-steps"
         style={{ marginBottom: 24 }}
       />
 
@@ -473,6 +781,7 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
 
         {chatConfigValue && (
           <Form.Item
+            className="sub-label"
             label="Dataset"
             name="dataset"
             rules={[
@@ -495,17 +804,67 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
               <Select.Option value={EDataset.COINGECKO}>
                 {EDataset.COINGECKO}
               </Select.Option>
-              {/* <Select.Option value={EDataset.DAILYFEEDS}>
-                {EDataset.DAILYFEEDS}
-              </Select.Option> */}
+              <Select.Option value={EDataset.KNOWLEDGEBASE}>
+                {EDataset.KNOWLEDGEBASE}
+              </Select.Option>
             </Select>
           </Form.Item>
+        )}
+
+        {datasetValue === EDataset.KNOWLEDGEBASE && (
+          <div style={{ marginLeft: "24px" }}>
+            <Form.Item
+              label={null}
+              name="website"
+              rules={[
+                {
+                  required: datasetValue === EDataset.KNOWLEDGEBASE,
+                  message: "Please enter the website address!",
+                },
+              ]}
+            >
+              <Input
+                autoComplete="off"
+                placeholder="Enter the website address"
+              />
+            </Form.Item>
+            <Form.Item
+              label={null}
+              name="website1"
+              rules={[
+                {
+                  required: false,
+                  message: "Please enter the website address!",
+                },
+              ]}
+            >
+              <Input
+                autoComplete="off"
+                placeholder="Enter the website address"
+              />
+            </Form.Item>
+            <Form.Item
+              label={null}
+              name="website2"
+              rules={[
+                {
+                  required: false,
+                  message: "Please enter the website address!",
+                },
+              ]}
+            >
+              <Input
+                autoComplete="off"
+                placeholder="Enter the website address"
+              />
+            </Form.Item>
+          </div>
         )}
 
         <Form.Item
           label={
             <div className="prompt-label">
-              <span>Chat Prompt</span>{" "}
+              <span style={{ fontSize: "14px" }}>Chat Prompt</span>{" "}
               <a
                 target="_blank"
                 href="https://ipfs.glitterprotocol.dev/ipfs/QmcY138nyXn9PEf26STTPeWHUBNUwbF43tih7avvJvsedt"
@@ -530,7 +889,17 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
         </Form.Item>
 
         <Form.Item
-          label="Blog Configuration (Optional)"
+          label={
+            <>
+              <span>Blog Configuration</span>
+              <span
+                style={{ color: "rgba(255, 255, 255, 0.5)", marginLeft: "2px" }}
+                className="optional-label"
+              >
+                (Optional)
+              </span>
+            </>
+          }
           name="blogConfig"
           rules={[
             {
@@ -550,6 +919,7 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
 
         {blogConfigValue && (
           <Form.Item
+            className="sub-label"
             label="Blog Dataset"
             name="blog_dataset"
             rules={[
@@ -563,9 +933,6 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
               <Select.Option value={EDataset.WEB3NEWS}>
                 {EDataset.WEB3NEWS}
               </Select.Option>
-              {/* <Select.Option value={EDataset.DAILYFEEDS}>
-                {EDataset.DAILYFEEDS}
-              </Select.Option> */}
             </Select>
           </Form.Item>
         )}
@@ -574,7 +941,7 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
           label={
             <div className="prompt-label">
               <div>
-                <span>Blog Prompt</span>
+                <span style={{ fontSize: "14px" }}>Blog Prompt</span>
               </div>
               <a
                 target="_blank"
@@ -605,7 +972,7 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
           rules={[{ required: true, message: "Please select a domain!" }]}
         >
           <Select
-            disabled={isFormDisabled || !address}
+            disabled={isFormDisabled || !isWalletConnected}
             placeholder={
               address ? "Select your domain" : "Please connect wallet first"
             }
@@ -639,9 +1006,35 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
             {domains.map((domain) => (
               <Select.Option key={domain} value={domain}>
                 {domain}
+                {network === ENetwork.Solana ? ".sol" : ""}
               </Select.Option>
             ))}
           </Select>
+        </Form.Item>
+
+        <Form.Item
+          label={
+            <>
+              <span>Connect Your Accounts</span>
+              <span
+                style={{ color: "rgba(255, 255, 255, 0.5)", marginLeft: "2px" }}
+                className="optional-label"
+              >
+                (Optional)
+              </span>
+            </>
+          }
+        >
+          <p className="social-media-desc">
+            Connect your social media to use Agent on it.
+          </p>
+          <div className="social-media-container">
+            <SocialMediaIcon
+              type={ESocialMedia.TWITTER}
+              onClick={() => handleMediaIconClick(ESocialMedia.TWITTER)}
+              active={!!socialMediaConfig[ESocialMedia.TWITTER]}
+            />
+          </div>
         </Form.Item>
 
         {errorStep && (
@@ -658,7 +1051,7 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
 
         <Form.Item>
           <Button
-            style={{ marginTop: 24 }}
+            style={{ marginTop: "24px", color: "#141414" }}
             type="primary"
             htmlType="submit"
             block
@@ -672,6 +1065,48 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
           </Button>
         </Form.Item>
       </Form>
+
+      {/* add social media form modal */}
+      <Modal
+        centered
+        className="media-modal"
+        title={
+          currentMedia
+            ? `Connect ${
+                currentMedia.charAt(0).toUpperCase() + currentMedia.slice(1)
+              }`
+            : ""
+        }
+        open={mediaModalVisible}
+        onCancel={() => setMediaModalVisible(false)}
+        footer={[
+          <div
+            key="buttons"
+            style={{
+              display: "flex",
+              gap: "16px",
+              justifyContent: "center",
+              width: "100%",
+            }}
+          >
+            <Button key="cancel" onClick={() => setMediaModalVisible(false)}>
+              Cancel
+            </Button>
+            <Button
+              style={{ color: "#141414" }}
+              key="submit"
+              type="primary"
+              onClick={handleMediaFormSubmit}
+            >
+              Confirm
+            </Button>
+          </div>,
+        ]}
+      >
+        <Form id="media-form" form={mediaForm} layout="vertical">
+          {currentMedia && getMediaFormFields(currentMedia)}
+        </Form>
+      </Modal>
     </div>
   );
 };

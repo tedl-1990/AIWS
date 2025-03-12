@@ -15,6 +15,9 @@ export interface FormValues {
   blogConfig: boolean;
   blogPrompt: string;
   blog_dataset: string;
+  website: string;
+  website1: string;
+  website2: string;
 }
 
 export interface StepData {

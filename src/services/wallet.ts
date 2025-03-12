@@ -332,9 +332,7 @@ export class WalletService {
     const results = await getDomainKeysWithReverses(connection, userAddr);
     const allDomains = results.map((item) => item.domain?.toString() || "");
     // for (let i = 0; i < results.length; i++) {
-    //   //获取子域名
     //   const subdomains = await findSubdomains(connection, results[i].pubKey);
-    //   console.log("子域名:", results[i].domain + "的子域名", subdomains);
     //   if (subdomains.length > 0) {
     //     allDomains.push(`${subdomains}.${results[i].domain}`);
     //   }
@@ -403,7 +401,7 @@ export class WalletService {
             agent_name: data.agentName,
             agent_intro: data.agentIntro,
             filename: data.snsName,
-            network: ENetwork.Solana
+            network: ENetwork.Solana,
           }))
           .sort((a, b) => b.timestamp - a.timestamp),
       };
@@ -490,12 +488,17 @@ export class WalletService {
         agent_name: data.name,
         agent_avatar: avatarCid[0].cid,
         agent_intro: data.functionDesc,
-        did: data.did,
+        did: data.did + ".sol",
         network: "SOLANA",
         detail: {
           chat_prompt: data.behaviorDesc,
           chat_dataset: data.dataset,
           blog_prompt: data.blogPrompt,
+          chat_knowledge_base: {
+            website: [data.website, data.website1, data.website2].filter(
+              (url) => url && url.trim() !== ""
+            ),
+          },
           blog_dataset: data.blog_dataset,
         },
       };

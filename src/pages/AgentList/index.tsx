@@ -67,7 +67,6 @@ enum AgentListTab {
 
 const MOBILE_BREAKPOINT = 768;
 
-// 添加黑名单数组
 const DID_BLACKLIST = [""];
 const TOP_AGENTS = ["ainick.eth"];
 
@@ -276,7 +275,7 @@ const AgentList: React.FC = () => {
       setTotalMessage(total_count);
     } catch (error) {
       console.error("Fetch messages error:", error);
-      message.error("Failed to load messages");
+      // message.error("Failed to load messages");
     } finally {
       setTableMessageLoading(false);
     }

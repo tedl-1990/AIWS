@@ -2,7 +2,6 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 
-// 根据命令区分环境
 export default defineConfig(({ command }) => ({
   base: './',
   // , basicSsl()
@@ -33,7 +32,6 @@ export default defineConfig(({ command }) => ({
     ],
   },
   define: {
-    // 根据命令设置环境变量
     'process.env.NODE_ENV': JSON.stringify(command === 'build' ? 'production' : 'development')
   },
   build: {

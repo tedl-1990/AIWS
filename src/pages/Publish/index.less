@@ -3,6 +3,12 @@
   padding: 24px 10%;
   box-sizing: border-box;
 
+  .publish-steps {
+    .ant-steps-icon {
+      color: #141414 !important;
+    }
+  }
+
   .publish-card {
     max-width: 800px;
     margin: 0 auto;
@@ -24,6 +30,27 @@
   .ant-btn-loading {
     opacity: 0.8;
   }
+
+  .sub-label {
+    .ant-form-item-label > label {
+      font-size: 14px !important;
+    }
+  }
+}
+
+#media-form {
+  .ant-form-item-label > label {
+    font-size: 14px !important;
+  }
+}
+
+.media-modal {
+  .ant-modal-title {
+    font-size: 20px !important;
+  }
+  .ant-modal-close {
+    top: 18px !important;
+  }
 }
 
 .ant-form-item {
@@ -38,6 +65,42 @@
   .config-desc {
     color: #4f4f4f;
     font-size: 14px;
+  }
+  .social-media-desc {
+    color: #4f4f4f;
+    font-size: 14px;
+    margin-bottom: 8px;
+  }
+  .social-media-container {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    justify-content: space-between;
+    .social-media-title {
+      font-size: 12px;
+      font-weight: 500;
+      color: #fff;
+    }
+    .social-media-icon {
+      width: 90px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      gap: 4px;
+      .connect-button {
+        width: 90px;
+        height: 24px;
+        line-height: 24px;
+        text-align: center;
+        font-size: 12px;
+        border-radius: 6px;
+        color: #f0b90b;
+        background-color: #141414;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        cursor: pointer;
+      }
+    }
   }
   .ant-form-item-label {
     label {
@@ -61,7 +124,7 @@
       font-size: 16px;
     }
     a {
-      color: #F0B90B;
+      color: #f0b90b;
       font-size: 14px;
       &:hover {
         text-decoration: underline;

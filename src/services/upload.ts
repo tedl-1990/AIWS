@@ -17,7 +17,8 @@ import { StepData } from "@/types";
 // Glitter IPFS API endpoint
 const GLITTER_IPFS_API_URL = "https://ipfs.glitterprotocol.dev/api/v0";
 // RPC
-const MAINNET_RPC = "https://rpc.ankr.com/eth";
+const MAINNET_RPC =
+  "https://eth-mainnet.g.alchemy.com/v2/R3tcNhC28ASQj99HY5D4JCVrCKGybkIx";
 
 /**
  * Interface for IPFS upload response
@@ -197,6 +198,14 @@ export const getAllRecords = async (): Promise<{
   }
 };
 
+export interface ISocialMediaData {
+  twitter_user_id: string;
+  twitter_api_key: string;
+  twitter_api_secret: string;
+  twitter_access_token: string;
+  twitter_access_secret: string;
+}
+
 /**
  * Upload file to Glitter IPFS
  * @param file File or Blob to upload
@@ -207,6 +216,7 @@ export const uploadToGlitter = async (
   fileList: File[],
   txId: string,
   chainId: string,
+  socialMediaData?: ISocialMediaData,
   onProgress?: (percent: number) => void
 ): Promise<IUploadRes> => {
   try {
@@ -214,6 +224,25 @@ export const uploadToGlitter = async (
     fileList.forEach((file) => {
       formData.append(`files[${file.name}]`, file);
     });
+
+    if (socialMediaData) {
+      const arr = [1];
+      formData.append("social_type", arr.join(","));
+      formData.append("twitter_user_id", socialMediaData?.twitter_user_id);
+      formData.append("twitter_api_key", socialMediaData?.twitter_api_key);
+      formData.append(
+        "twitter_api_secret",
+        socialMediaData?.twitter_api_secret
+      );
+      formData.append(
+        "twitter_access_token",
+        socialMediaData?.twitter_access_token
+      );
+      formData.append(
+        "twitter_access_secret",
+        socialMediaData?.twitter_access_secret
+      );
+    }
 
     const { data } = await axios.post(
       `${GLITTER_IPFS_API_URL}/upagent?tx_id=${txId}&chainid=${chainId}`,
@@ -388,6 +417,9 @@ export interface IUploadData {
   hasBlog: boolean;
   hasRAG: boolean;
   did: string;
+  website?: string;
+  website1?: string;
+  website2?: string;
 }
 
 export const createContractRecord = async (
@@ -423,6 +455,12 @@ export const createContractRecord = async (
 
     const avatarCid = await createAvatarCid(formData.avatar);
     const agentId = nanoid();
+    const chatKnowledgeBase = [
+      formData.website,
+      formData.website1,
+      formData.website2
+    ].filter(url => url && url.trim() !== '');
+    
     const { htmlString } = generateHTML({
       name: formData.name,
       avatar: avatarCid[0].cid,
@@ -449,6 +487,9 @@ export const createContractRecord = async (
       detail: {
         chat_prompt: formData.behaviorDesc,
         chat_dataset: formData.dataset,
+        chat_knowledge_base: {
+          website: chatKnowledgeBase,
+        },
         blog_prompt: formData.blogPrompt,
         blog_dataset: formData.blog_dataset,
       },
@@ -510,6 +551,7 @@ export const createContractRecord = async (
 export const uploadToIPFS = async (
   stepData: StepData,
   network: string,
+  socialMediaData?: ISocialMediaData,
   onProgress?: (percent: number) => void
 ): Promise<{ contentHash: string; avatarHash: string }> => {
   try {
@@ -525,6 +567,7 @@ export const uploadToIPFS = async (
       dirFileList,
       contractData.txHash,
       network, // Ethereum mainnet
+      socialMediaData,
       onProgress
     );
 

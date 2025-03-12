@@ -11,7 +11,7 @@ import styles from "./index.module.less";
 import { WalletService } from "@/services/wallet";
 import { ENetwork, networks } from "@/services/network";
 import { useRecoilState } from "recoil";
-import { networkState } from "@/store/network";
+import { isWalletConnectedState, networkState } from "@/store/network";
 import { NETWORK_TYPE } from "@/utils/constants";
 
 interface WalletConnectProps {
@@ -30,7 +30,9 @@ const WalletConnect: React.FC<WalletConnectProps> = ({
   const [messageApi, contextHolder] = message.useMessage();
   const [network, setNetwork] = useRecoilState(networkState);
   const [connecting, setConnecting] = useState(false);
-  const [isWalletConnected, setIsWalletConnected] = useState(false);
+  const [isWalletConnected, setIsWalletConnected] = useRecoilState(
+    isWalletConnectedState
+  );
 
   const walletService = WalletService.getInstance();
 
@@ -40,7 +42,7 @@ const WalletConnect: React.FC<WalletConnectProps> = ({
       setIsWalletConnected(walletService.isConnected());
     });
     return unsubscribe;
-  }, [walletService]);
+  }, [walletService, setIsWalletConnected]);
 
   // Connect wallet
   const handleConnectWallet = async (network: ENetwork) => {

@@ -114,10 +114,10 @@ const Independent: React.FC = () => {
   const roles = {
     ai: {
       placement: "start" as const,
-      typing: { 
-        step: 1,
-        interval: 30,
-        enabled: true
+      typing: {
+        step: 1, 
+        interval: 30, 
+        enabled: true, 
       },
       avatar: { src: avatar },
       loadingRender: () => <Loader />,
@@ -131,9 +131,9 @@ const Independent: React.FC = () => {
   // Utility functions
   const scrollChatToBottom = useCallback(() => {
     requestAnimationFrame(() => {
-      if (chatContainerRef.current) {
-        chatContainerRef.current.scrollTop =
-          chatContainerRef.current.scrollHeight;
+      const container = document.getElementById("chat-container");
+      if (container) {
+        container.scrollTop = container.scrollHeight;
       }
     });
   }, []);
@@ -176,7 +176,7 @@ const Independent: React.FC = () => {
 
   const { onRequest, messages, setMessages } = useXChat<string, string>({
     agent,
-    requestPlaceholder: "Waiting...",
+    requestPlaceholder: "Loading...",
   });
 
   const updateMessageCid = useCallback(
@@ -191,12 +191,20 @@ const Independent: React.FC = () => {
   );
 
   const onSubmit = useCallback(() => {
-    const content = inputRef.current?.value;
-    if (isComposing || !content) return;
-    onRequest(content);
-    inputRef.current.value = "";
-    scrollChatToBottom();
-  }, [isComposing, onRequest, scrollChatToBottom]);
+    try {
+      const content = inputRef.current?.value;
+      if (isComposing || !content || agent.isRequesting()) return;
+
+      setIsComposing(true);
+      onRequest(content);
+      inputRef.current.value = "";
+      scrollChatToBottom();
+    } catch (error) {
+      console.error("Error:", error);
+    } finally {
+      setIsComposing(false);
+    }
+  }, [isComposing, onRequest, scrollChatToBottom, agent]);
 
   // Feed handling
   const [feedLoading, setFeedLoading] = useState(false);
@@ -260,12 +268,7 @@ const Independent: React.FC = () => {
     return (messages as CustomMessageInfo[]).map(
       ({ id, message, status, messageCid = "" }) => ({
         key: id,
-        typing: status === "ai" ? { 
-          step: 1,
-          interval: 30,
-          enabled: true
-        } : undefined,
-        loading: status === "loading",
+        loading: message.length === 0,
         role: status === "local" ? "local" : "ai",
         content: <CustomBubble content={message} messageCid={messageCid} />,
       })
@@ -295,6 +298,10 @@ const Independent: React.FC = () => {
       queryFeedList();
     }
   }, [hasBlog, queryFeedList]);
+
+  useEffect(() => {
+    scrollChatToBottom();
+  }, [messages, scrollChatToBottom]);
 
   const contentTabWidth = useMemo(() => {
     if (isOnMobile) {
@@ -367,7 +374,7 @@ const Independent: React.FC = () => {
                     alt="farcaster"
                   />
                 )}
-              </div>  
+              </div>
               {!isOnMobile && (
                 <div>
                   <p className="agent-desc ai-agent-flicker">{functionDesc}</p>
@@ -471,23 +478,31 @@ const Independent: React.FC = () => {
             </div>
             {/* chat */}
             <div
-              ref={chatContainerRef}
               style={{ display: activeTab === "chat" ? "block" : "none" }}
               className="chat-container"
+              ref={chatContainerRef}
             >
-              <Bubble.List items={items} roles={roles} className="messages" />
+              <Bubble.List
+                id="chat-container"
+                items={items}
+                roles={roles}
+                className="messages"
+              />
               <div className="sender">
                 <input
                   ref={inputRef}
-                  placeholder="Send a message, and I will chat with you."
+                  disabled={agent.isRequesting()}
+                  placeholder={
+                    agent.isRequesting()
+                      ? "Loading..."
+                      : "Send a message, and I will chat with you."
+                  }
                   className="sender-input"
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       onSubmit();
                     }
                   }}
-                  onCompositionStart={() => setIsComposing(true)}
-                  onCompositionEnd={() => setIsComposing(false)}
                 />
                 <Button
                   loading={agent.isRequesting()}

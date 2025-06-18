@@ -27,38 +27,15 @@ import xLogo from "@/assets/images/icon-X.png";
 import AgentCard, { IContractHistoryRow } from "@/components/agentCard";
 import MessageCard, { IMessageRow } from "@/components/MessageCard";
 import { getMessageList } from "@/services/api";
-import { AVATAR_URL, MESSAGE_URL } from "@/utils";
+import { AVATAR_URL, createLoginMessage, MESSAGE_URL } from "@/utils";
 import avatar_default from "@/assets/images/default-avatar.png";
 import icEthereum from "@/assets/images/ic-eth.png";
 import icSolana from "@/assets/images/ic-sol.png";
 import starPng from "@/assets/images/icon-star.png";
 import { WalletService } from "@/services/wallet";
 import { ENetwork } from "@/services/network";
-import { networkState } from "@/store/network";
+import { drawerOpenState, networkState } from "@/store/network";
 import { useRecoilState } from "recoil";
-/**
- * Create authentication message with timestamp
- * @param address Wallet address
- * @returns Message and timestamp
- */
-const createLoginMessage = (address: string) => {
-  const timestamp = Math.floor(new Date().getTime() / 1000);
-  const msg = `
-Login on AIWS:
-
-This signature is used only for login and does not include any other fees.
-
-Wallet address:
-${address}
-
-Nonce:
-${timestamp}
-`;
-  return {
-    msg,
-    timestamp,
-  };
-};
 
 enum AgentListTab {
   Agents = "Agents",
@@ -75,7 +52,8 @@ const TOP_AGENTS = ["ainick.eth"];
  */
 const AgentList: React.FC = () => {
   // State management
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  // const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useRecoilState(drawerOpenState);
   const [loading, setLoading] = useState(false);
   const [tableLoading, setTableLoading] = useState(false);
   const [tableMessageLoading, setTableMessageLoading] = useState(false);

@@ -1,0 +1,149 @@
+.propoals-container {
+  display: flex;
+  align-items: center;
+  padding: 16px 20px;
+  margin-bottom: 12px;
+  //   background-color: #f5f7fa;
+  color: #f0b90b;
+  border-radius: 12px;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.2s ease;
+  border: 1px solid #f0b90b;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+  }
+
+  .propoals-id {
+    width: 60px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    font-weight: 700;
+    color: #f0b90b;
+    margin-right: 20px;
+    flex-shrink: 0;
+  }
+
+  .propoals-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #f0b90b;
+    line-height: 1.3;
+  }
+
+  .propoals-description {
+    display: none; // 隐藏描述
+  }
+
+  .proposal-status-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+
+  .proposal-time {
+    display: flex;
+    align-items: center;
+    color: #f0b90b;
+    font-size: 14px;
+    background-color: rgba(240, 185, 11, 0.1);
+    padding: 6px 12px;
+    border-radius: 20px;
+
+    .status-icon {
+      margin-right: 6px;
+    }
+  }
+
+  .proposal-status {
+    padding: 6px 16px;
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: 500;
+
+    &.status-active {
+      background-color: #4caf50;
+      color: white;
+    }
+
+    &.status-pending {
+      background-color: #4caf50;
+      color: white;
+    }
+
+    &.status-defeated {
+      background-color: #e53935;
+      color: white;
+    }
+
+    &.status-executed {
+      background-color: #3f51b5;
+      color: white;
+    }
+
+    &.status-succeeded {
+      background-color: #4caf50;
+      color: white;
+    }
+  }
+
+  .proposal-updatable {
+    background-color: #4CAF50;
+    color: white;
+    padding: 4px 12px;
+    border-radius: 16px;
+    font-size: 13px;
+    font-weight: 500;
+    border: 1px solid #388E3C;
+    margin-left: 12px;
+  }
+}
+
+@media screen and (max-width: 768px) {
+  .propoals-container {
+    padding: 12px 16px;
+    flex-wrap: wrap;
+
+    .propoals-id {
+      width: 50px;
+      height: 50px;
+      font-size: 20px;
+      margin-right: 16px;
+    }
+
+    .propoals-title {
+      font-size: 16px;
+    }
+
+    .proposal-status-wrapper {
+      margin-top: 8px;
+      width: 100%;
+      justify-content: flex-end;
+    }
+
+    .proposal-time,
+    .proposal-status {
+      font-size: 13px;
+    }
+
+    .proposal-time {
+      padding: 4px 10px;
+    }
+
+    .proposal-status {
+      padding: 4px 12px;
+    }
+
+    .proposal-updatable {
+      font-size: 11px;
+      padding: 3px 10px;
+    }
+  }
+}

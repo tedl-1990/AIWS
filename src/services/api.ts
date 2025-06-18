@@ -6,6 +6,8 @@ interface IMessageProps {
     content: string;
   }[];
   thread_id: string;
+  nouns_proposal_id?: number | string | undefined;
+  user_address?: string | undefined;
 }
 
 const API_HOST = import.meta.env.VITE_APP_APIHOST;
@@ -37,6 +39,8 @@ export const uploadMessage = async (data: {
   message: string;
   message_cid: string;
   prev_message_cid: string;
+  user_address: string;
+  nouns_proposal_id: number | undefined;
   role: 0 | 1;
   session: string;
 }) => {
@@ -84,20 +88,55 @@ export const getChatCompletionsStream = async (
 
   try {
     const response = await fetch(`${API_HOST}/chat/completions/stream`, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'text/event-stream',
+        "Content-Type": "application/json",
+        Accept: "text/event-stream",
       },
       body: JSON.stringify(data),
-      signal: controller.signal
+      signal: controller.signal,
+      
+      
     });
 
     clearTimeout(timeoutId);
+    console.log(response, "response");
 
     if (!response.ok) {
-      const text = await response.text();
-      throw new Error(text);
+      const contentType = response.headers.get("Content-Type") || "";
+      let errorCode = response.status;
+      let errorMessage = `Error: ${response.status}`;
+      let errorData = null;
+
+      try {
+        if (contentType.includes("application/json")) {
+          const responseClone = response.clone();
+          try {
+            errorData = await responseClone.json();
+            errorCode = errorData.code || errorCode;
+            errorMessage = errorData.message || errorMessage;
+          } catch (jsonError) {
+            console.log("JSON解析错误:", jsonError);
+            errorMessage = await response.text() || errorMessage;
+          }
+        } else {
+          errorMessage = await response.text() || errorMessage;
+        }
+      } catch (e) {
+        console.log("处理错误响应时发生错误:", e);
+        errorMessage = `服务器错误 (${response.status})`;
+      }
+
+      console.log("API错误详情:", { 
+        errorCode, 
+        errorMessage, 
+        errorData,
+        status: response.status,
+        statusText: response.statusText,
+        contentType
+      });
+      
+      throw new Error(`${errorMessage} [Code: ${errorCode}]`);
     }
 
     const reader = response.body?.getReader();
@@ -105,8 +144,10 @@ export const getChatCompletionsStream = async (
       throw new Error("Response body is null");
     }
 
+    console.log(reader, "reader");
+
     const decoder = new TextDecoder();
-    let buffer = '';
+    let buffer = "";
 
     try {
       while (true) {
@@ -121,8 +162,8 @@ export const getChatCompletionsStream = async (
           }
 
           buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
 
           for (const line of lines) {
             if (line.trim()) {
@@ -144,6 +185,7 @@ export const getChatCompletionsStream = async (
             }
           }
         } catch (readError) {
+          console.log(readError, "readError");
           // Only throw if not completed
           if (!isCompleted) {
             throw readError;
@@ -174,13 +216,14 @@ export const getChatCompletionsStream = async (
       reader.releaseLock();
     }
   } catch (error) {
+    console.log(error, "error");
     clearTimeout(timeoutId);
     // Only trigger error if not completed
     if (!isCompleted) {
       if (error instanceof Error) {
         handler.onError?.(error);
       } else {
-        handler.onError?.(new Error('Unknown error occurred'));
+        handler.onError?.(new Error("Unknown error occurred"));
       }
     }
   }

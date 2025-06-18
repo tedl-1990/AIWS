@@ -4,7 +4,7 @@
  * Allows users to create and publish new AI agents
  */
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Form,
   Input,
@@ -31,7 +31,8 @@ import tg from "@/assets/images/tg.png";
 import farcaster from "@/assets/images/farcaster.png";
 import discord from "@/assets/images/discord.png";
 import { useRecoilState } from "recoil";
-import { isWalletConnectedState } from "@/store/network";
+import { drawerOpenState, isWalletConnectedState } from "@/store/network";
+import { getWhiteList } from "@/services/aiChatFeed";
 const { TextArea } = Input;
 
 /**
@@ -57,6 +58,7 @@ const enum EDataset {
   DAILYFEEDS = "Dailyfeeds",
   COINGECKO = "Coingecko",
   KNOWLEDGEBASE = "KnowledgeBase",
+  NOUNS = "Nouns",
 }
 
 // add social media type definition
@@ -89,6 +91,11 @@ enum ESocialMedia {
   DISCORD = "discord",
 }
 
+enum EAgentType {
+  normal = 2,
+  nouns = 3,
+}
+
 /**
  * Publish component for creating new AI agents
  */
@@ -97,12 +104,14 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
   const [form] = Form.useForm<FormValues>();
   const chatConfigValue = Form.useWatch("chatConfig", form);
   const blogConfigValue = Form.useWatch("blogConfig", form);
+  const agentTypeValue = Form.useWatch("agent_type", form);
   const [avatarFile, setAvatarFile] = useState<RcFile>();
   const [submitting, setSubmitting] = React.useState(false);
   const [currentStep, setCurrentStep] = useState<PublishStep>(
     PublishStep.CONTRACT
   );
   const [stepMessage, setStepMessage] = useState("");
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const [domains, setDomains] = React.useState<string[]>([]);
   const [loadingDomains, setLoadingDomains] = React.useState(false);
@@ -113,6 +122,7 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
   const walletService = WalletService.getInstance();
   const address = walletService.getWalletInfo()?.address;
   const [isWalletConnected] = useRecoilState(isWalletConnectedState);
+  const [drawerOpen] = useRecoilState(drawerOpenState);
   const network = walletService.getCurrentNetwork();
   const [errorStep, setErrorStep] = useState<PublishStep | null>(null);
 
@@ -180,6 +190,7 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
         functionDesc: values.functionDesc,
         behaviorDesc: values.behaviorDesc,
         did: values.did,
+        agent_type: values.agent_type,
         dataset: values.dataset,
         blog_dataset: values.blog_dataset,
         blogPrompt: values.blogPrompt,
@@ -343,6 +354,10 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
     // add social media config to values
     const formValuesWithSocial = {
       ...values,
+      dataset:
+        isAdmin && agentTypeValue === EAgentType.nouns
+          ? "Nouns"
+          : values.dataset,
       socialMediaConfig,
     };
 
@@ -384,6 +399,17 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
 
     fetchENSDomains();
   }, [address, walletService]);
+
+  useEffect(() => {
+    if (!address || !drawerOpen) return;
+    getWhiteList(address)
+      .then((res) => {
+        setIsAdmin(res);
+      })
+      .catch((error) => {
+        console.error(error);
+      });
+  }, [address, drawerOpen]);
 
   const handleReset = () => {
     form.resetFields();
@@ -735,6 +761,25 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
           />
         </Form.Item>
 
+        {isAdmin && (
+          <Form.Item
+            className="sub-label"
+            label="Agent Type"
+            name="agent_type"
+            rules={[
+              {
+                required: isAdmin,
+                message: "Please select a agent type!",
+              },
+            ]}
+          >
+            <Select placeholder="Please select a agent type">
+              <Select.Option value={EAgentType.normal}>Normal</Select.Option>
+              <Select.Option value={EAgentType.nouns}>Nouns</Select.Option>
+            </Select>
+          </Form.Item>
+        )}
+
         <Form.Item
           label="Avatar"
           name="avatar"
@@ -806,6 +851,9 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
               </Select.Option>
               <Select.Option value={EDataset.KNOWLEDGEBASE}>
                 {EDataset.KNOWLEDGEBASE}
+              </Select.Option>
+              <Select.Option value={EDataset.NOUNS}>
+                {EDataset.NOUNS}
               </Select.Option>
             </Select>
           </Form.Item>
@@ -908,13 +956,15 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
             },
           ]}
         >
-          <Checkbox onChange={handleBlogConfigChange}>
-            Blog Generation with RAG
-          </Checkbox>
-          <p className="config-desc">
-            Automatically generate blog summarizing key trends and highlights
-            from selected datasets.
-          </p>
+          <>
+            <Checkbox onChange={handleBlogConfigChange}>
+              Blog Generation with RAG
+            </Checkbox>
+            <p className="config-desc">
+              Automatically generate blog summarizing key trends and highlights
+              from selected datasets.
+            </p>
+          </>
         </Form.Item>
 
         {blogConfigValue && (
@@ -1025,16 +1075,18 @@ const Publish: React.FC<PublishProps> = ({ onSuccess }) => {
             </>
           }
         >
-          <p className="social-media-desc">
-            Connect your social media to use Agent on it.
-          </p>
-          <div className="social-media-container">
-            <SocialMediaIcon
-              type={ESocialMedia.TWITTER}
-              onClick={() => handleMediaIconClick(ESocialMedia.TWITTER)}
-              active={!!socialMediaConfig[ESocialMedia.TWITTER]}
-            />
-          </div>
+          <>
+            <p className="social-media-desc">
+              Connect your social media to use Agent on it.
+            </p>
+            <div className="social-media-container">
+              <SocialMediaIcon
+                type={ESocialMedia.TWITTER}
+                onClick={() => handleMediaIconClick(ESocialMedia.TWITTER)}
+                active={!!socialMediaConfig[ESocialMedia.TWITTER]}
+              />
+            </div>
+          </>
         </Form.Item>
 
         {errorStep && (

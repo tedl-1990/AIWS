@@ -1,3 +1,45 @@
+.wallet-connect-container {
+  display: flex;
+  align-items: center;
+}
+
+.container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.connect-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background-color: #f0b90b;
+  color: #000;
+  border: none;
+  
+  &:hover, &:focus {
+    background-color: #f8d33a;
+    color: #000;
+  }
+}
+
+.select {
+  min-width: 120px;
+  
+  :global {
+    .ant-select-selector {
+      background-color: transparent !important;
+      border: 1px solid #f0b90b !important;
+      color: #f0b90b !important;
+    }
+    
+    .ant-select-arrow {
+      color: #f0b90b !important;
+    }
+  }
+}
+
 .wallet-connect-button {
   min-width: 140px;
   display: flex;

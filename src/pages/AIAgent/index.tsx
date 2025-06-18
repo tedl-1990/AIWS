@@ -13,7 +13,7 @@ import { v4 as uuidv4 } from "uuid";
 import "./index.less";
 
 import { sendMessage } from "@/services/ai";
-import { getBlogList } from "@/services/aiChatFeed";
+import { getBlogList, IBlogItem } from "@/services/aiChatFeed";
 import { getEnsSocialAccounts } from "@/services/ens";
 
 // Assets
@@ -29,12 +29,6 @@ import icFarcaster from "@/assets/images/ic-farcaster.png";
 import icCopy from "@/assets/images/ic-copy.png";
 import { MESSAGE_URL } from "@/utils";
 import Loader from "@/components/Loader";
-
-// Types
-interface FeedItem {
-  title: string;
-  content: string;
-}
 
 interface CustomMessageInfo {
   messageCid: string;
@@ -56,7 +50,7 @@ const DEFAULT_CONFIG = {
   model: "gpt-3.5-turbo",
   did: "nick.eth",
   id: "0",
-  agentId: "l5_pEJ6aAydRl8c0KQsIH",
+  agentId: "s3PnrR9LrtJVBPjLG-43h",
   blogPrompt: "",
   hasBlog: HAS_BLOG,
 };
@@ -85,7 +79,7 @@ const Independent: React.FC = () => {
   const [activeTab, setActiveTab] = useState<"feed" | "chat">(
     hasBlog ? "feed" : "chat"
   );
-  const [feedList, setFeedList] = useState<FeedItem[]>([]);
+  const [feedList, setFeedList] = useState<IBlogItem[]>([]);
   const [isOnMobile, setIsOnMobile] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
   const [activeMessageCid, setActiveMessageCid] = useState<string>("");
@@ -115,9 +109,9 @@ const Independent: React.FC = () => {
     ai: {
       placement: "start" as const,
       typing: {
-        step: 1, 
-        interval: 30, 
-        enabled: true, 
+        step: 1,
+        interval: 30,
+        enabled: true,
       },
       avatar: { src: avatar },
       loadingRender: () => <Loader />,
@@ -154,6 +148,8 @@ const Independent: React.FC = () => {
         await sendMessage(
           message || "",
           sessionId,
+          "",
+          undefined,
           (text: string, messageCid: string) => {
             updateMessageCid(text, messageCid);
           },
@@ -211,12 +207,12 @@ const Independent: React.FC = () => {
   const queryFeedList = useCallback(async () => {
     try {
       setFeedLoading(true);
-      const res = await getBlogList({
+      const data = await getBlogList({
         agent_id: String(sessionParam.agentId),
         page: 1,
         limit: 100,
       });
-      setFeedList(res.data);
+      setFeedList(data);
       setFeedLoading(false);
     } catch (error) {
       setFeedLoading(false);

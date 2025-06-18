@@ -4,6 +4,7 @@ import AgentList from "./pages/AgentList";
 import { ConfigProvider, theme } from "antd";
 import { message } from "antd";
 import { RecoilRoot } from 'recoil';
+import NounsAgent from "./pages/NounsAgent";
 
 message.config({
   maxCount: 1,
@@ -44,6 +45,7 @@ function App() {
             <Routes>
               <Route path="/" element={<AgentList />} />
               <Route path="/ai" element={<AIAgent />} />
+              <Route path="/nouns" element={<NounsAgent />} />
               <Route path="*" element={<AgentList />} />
             </Routes>
           </div>

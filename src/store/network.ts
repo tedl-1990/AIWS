@@ -19,3 +19,8 @@ export const isWalletConnectedState = atom<boolean>({
   key: "isWalletConnectedState",
   default: !!localStorage.getItem("Authentication-Tokens"),
 });
+
+export const drawerOpenState = atom<boolean>({
+  key: "drawerOpenState",
+  default: false,
+});

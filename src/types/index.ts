@@ -9,6 +9,7 @@ export interface FormValues {
   name: string;
   functionDesc: string;
   behaviorDesc: string;
+  agent_type: number;
   did: string;
   chatConfig: boolean;
   dataset: string;

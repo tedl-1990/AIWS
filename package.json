@@ -1,13 +1,14 @@
 {
   "name": "AIWS",
   "private": true,
-  "version": "1.1.1",
+  "version": "1.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build:agent": "vite build --config vite.agent.config.ts",
+    "build:nouns": "vite build --config vite.nouns.config.ts",
     "build:main": "vite build",
-    "build": "npm run build:main && npm run build:agent",
+    "build": "npm run build:main && npm run build:agent && npm run build:nouns",
     "lint": "eslint .",
     "deploy": "pnpm run build && glitter-cli upload ./dist"
   },
@@ -20,6 +21,7 @@
     "@ensdomains/ensjs": "^4.0.2",
     "@ipld/dag-json": "^10.2.3",
     "@multiformats/blake2": "^2.0.2",
+    "@paperclip-labs/whisk-sdk": "^0.1.1",
     "@project-serum/anchor": "^0.26.0",
     "@solana/buffer-layout": "^4.0.1",
     "@solana/buffer-layout-utils": "^0.2.0",
@@ -27,7 +29,6 @@
     "@solana/web3.js": "^1.98.0",
     "@wagmi/core": "1.4.13",
     "antd": "^5.22.7",
-    "antd-style": "^3.7.1",
     "axios": "^0.27.2",
     "buffer": "^6.0.3",
     "ethers": "^5.7.2",
@@ -40,6 +41,7 @@
     "react-markdown": "^9.0.3",
     "react-router-dom": "^7.1.1",
     "recoil": "^0.7.7",
+    "urql": "^4.2.2",
     "viem": "1.21.4",
     "wagmi": "1.4.13"
   },

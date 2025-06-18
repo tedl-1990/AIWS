@@ -26,6 +26,8 @@ declare global {
   }
 }
 
+export const default_agent_id = "v787QBGFzjd6Kl37O0ID6";
+
 /**
  * Remove quotes from start and end of text
  */
@@ -67,6 +69,8 @@ export const calculateCid = async (
 export const sendMessage = async (
   message: string,
   sessionId: string,
+  user_address?: string,
+  nouns_proposal_id?: number,
   onSend?: (text: string, messageCid: string) => void,
   onProgress?: (text: string, messageCid: string) => void,
   onFinish?: (text: string, messageCid: string) => void
@@ -75,8 +79,9 @@ export const sendMessage = async (
     if (message.length === 0) {
       return;
     }
-    const agent_id = window.aiData?.agentId || window.aiData?.id || "l5_pEJ6aAydRl8c0KQsIH";
-    const did = window.aiData?.did || "test.agent";
+    const agent_id =
+      window.aiData?.agentId || window.aiData?.id || default_agent_id;
+    const did = window.aiData?.did || "testagent.eth";
 
     // Get current conversation history
     const history = conversationHistories[currentConversationId] || [];
@@ -98,13 +103,15 @@ export const sendMessage = async (
       message_cid: message_cid,
       prev_message_cid: history[history.length - 1]?.messageCid || "",
       role: 0,
+      user_address: user_address || "",
       session: sessionId,
+      nouns_proposal_id: Number(nouns_proposal_id),
     });
 
     history.push({ role: "user", content: message, messageCid: message_cid });
 
-    let fullResponse = '';
-    const tempMessageCid = 'loading_message_cid'; // Temporary messageCid
+    let fullResponse = "";
+    const tempMessageCid = "loading_message_cid"; // Temporary messageCid
 
     await getChatCompletionsStream(
       {
@@ -112,15 +119,20 @@ export const sendMessage = async (
           agent_id: String(agent_id),
           messages: [{ content: message || "" }],
           thread_id: sessionId,
+          user_address: user_address,
+          nouns_proposal_id: Number(nouns_proposal_id),
         },
       },
       {
         onMessage: (content) => {
+          console.log(content);
           fullResponse += content;
           const cleanResponse = removeQuotes(fullResponse);
-          
+
           // Find if message already exists
-          const existingMessageIndex = history.findIndex(msg => msg.messageCid === tempMessageCid);
+          const existingMessageIndex = history.findIndex(
+            (msg) => msg.messageCid === tempMessageCid
+          );
           if (existingMessageIndex !== -1) {
             // Update existing message content
             history[existingMessageIndex].content = cleanResponse;
@@ -132,13 +144,13 @@ export const sendMessage = async (
               messageCid: tempMessageCid,
             });
           }
-          
+
           conversationHistories[currentConversationId] = history;
           onProgress?.(fullResponse, tempMessageCid);
         },
         onComplete: async () => {
           const cleanResponse = removeQuotes(fullResponse);
-          
+
           // Calculate real messageCid
           const response_cid = await calculateCid({
             message: cleanResponse,
@@ -150,30 +162,36 @@ export const sendMessage = async (
           });
 
           // Replace temporary messageCid
-          const messageIndex = history.findIndex(msg => msg.messageCid === tempMessageCid);
+          const messageIndex = history.findIndex(
+            (msg) => msg.messageCid === tempMessageCid
+          );
           if (messageIndex !== -1) {
             history[messageIndex].messageCid = response_cid;
           }
-          
+
           conversationHistories[currentConversationId] = history;
           onFinish?.(fullResponse, response_cid);
-
-          uploadMessage({
-            agent_id: String(agent_id),
-            ens: did,
-            message: cleanResponse,
-            message_cid: response_cid,
-            prev_message_cid: message_cid,
-            role: 1,
-            session: sessionId,
-          });
+          if (cleanResponse) {
+            uploadMessage({
+              agent_id: String(agent_id),
+              ens: did,
+              message: cleanResponse,
+              message_cid: response_cid,
+              prev_message_cid: message_cid,
+              role: 1,
+              user_address: user_address || "",
+              nouns_proposal_id: Number(nouns_proposal_id),
+              session: sessionId,
+            });
+          }
         },
         onError: (error) => {
+          console.log(error, "error");
           throw error;
         },
         onTimeout: () => {
           throw new Error("Request timeout");
-        }
+        },
       }
     );
 
@@ -182,8 +200,9 @@ export const sendMessage = async (
     console.error("Error sending message:", error);
     const errorMessage = "Sorry, an error occurred. Please try again later.";
     const history = conversationHistories[currentConversationId] || [];
-    const agent_id = window.aiData?.agentId || window.aiData?.id || "dgl6Ez4ZKOu5GczMN3veC";
-    const did = window.aiData?.did || "test.agent";
+    const agent_id =
+      window.aiData?.agentId || window.aiData?.id || default_agent_id;
+    const did = window.aiData?.did || "testagent.eth";
     const error_cid = await calculateCid({
       message: errorMessage,
       prev_message_cid: history[history.length - 1]?.messageCid || "",
@@ -199,6 +218,8 @@ export const sendMessage = async (
       message_cid: error_cid,
       prev_message_cid: history[history.length - 1]?.messageCid || "",
       role: 1,
+      user_address: user_address || "",
+      nouns_proposal_id: Number(nouns_proposal_id),
       session: sessionId,
     });
     history.push({

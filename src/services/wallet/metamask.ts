@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { createConfig, configureChains, mainnet } from 'wagmi'
 import { MetaMaskConnector } from 'wagmi/connectors/metaMask'
 import { publicProvider } from 'wagmi/providers/public'
@@ -84,12 +85,14 @@ export class MetaMaskWalletService extends BaseWalletService {
 
   async signMessage(message: string): Promise<string> {
     if (!this.isConnected || !this.info?.address) {
-      throw new Error('Wallet not connected')
+      throw new Error("Wallet not connected");
     }
-    
-    return this.provider?.request({
-      method: 'personal_sign',
-      params: [message, this.info.address]
-    })
+    if (!this.provider || !(this.provider as any).request) {
+      throw new Error("Provider not found");
+    }
+    return (this.provider as any).request({
+      method: "personal_sign",
+      params: [message, this.info.address],
+    });
   }
 } 

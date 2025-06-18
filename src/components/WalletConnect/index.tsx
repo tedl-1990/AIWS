@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState, useEffect } from "react";
 import { Button, Dropdown, message, Space, Select } from "antd";
 import {
@@ -7,24 +8,27 @@ import {
   PlusOutlined,
 } from "@ant-design/icons";
 import type { MenuProps } from "antd";
-import styles from "./index.module.less";
+import "./index.less";
 import { WalletService } from "@/services/wallet";
 import { ENetwork, networks } from "@/services/network";
 import { useRecoilState } from "recoil";
 import { isWalletConnectedState, networkState } from "@/store/network";
 import { NETWORK_TYPE } from "@/utils/constants";
+import { Name } from "@paperclip-labs/whisk-sdk/identity";
 
 interface WalletConnectProps {
   onDisconnect: () => void;
   onConnect?: (type: ENetwork) => void;
   showPublishDrawer: () => void;
   loading: boolean;
+  showPublish?: boolean;
 }
 
 const WalletConnect: React.FC<WalletConnectProps> = ({
   onDisconnect,
   onConnect,
   showPublishDrawer,
+  showPublish = true,
   loading,
 }) => {
   const [messageApi, contextHolder] = message.useMessage();
@@ -35,6 +39,7 @@ const WalletConnect: React.FC<WalletConnectProps> = ({
   );
 
   const walletService = WalletService.getInstance();
+  const currentInfo = walletService.getWalletInfo();
 
   useEffect(() => {
     setIsWalletConnected(walletService.isConnected());
@@ -120,17 +125,6 @@ const WalletConnect: React.FC<WalletConnectProps> = ({
     }
   };
 
-  // Format address
-  const formatAddress = (addr: string) => {
-    return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
-  };
-
-  // Get display address
-  const getDisplayAddress = () => {
-    const info = walletService.getWalletInfo();
-    return info ? formatAddress(info.address) : "";
-  };
-
   // Account dropdown items
   const accountItems: MenuProps["items"] = [
     ...(network === ENetwork.Ethereum
@@ -174,15 +168,17 @@ const WalletConnect: React.FC<WalletConnectProps> = ({
   return (
     <>
       {contextHolder}
-      <Space className={styles.container}>
-        <Select
-          className={styles.select}
-          value={network}
-          onChange={handleNetworkChange}
-          options={networks}
-        />
+      <Space className="container">
+        {showPublish && (
+          <Select
+            className="select"
+            value={network}
+            onChange={handleNetworkChange}
+            options={networks}
+          />
+        )}
 
-        {isWalletConnected && (
+        {isWalletConnected && showPublish && (
           <Button
             style={{ color: "#000" }}
             type="primary"
@@ -195,7 +191,7 @@ const WalletConnect: React.FC<WalletConnectProps> = ({
 
         {!isWalletConnected || isLoading ? (
           <Button
-            className={styles.connectButton}
+            className="connect-button"
             icon={<WalletOutlined />}
             onClick={() => handleConnectWallet(network)}
             loading={isLoading}
@@ -204,12 +200,11 @@ const WalletConnect: React.FC<WalletConnectProps> = ({
           </Button>
         ) : (
           <Dropdown menu={{ items: accountItems }} trigger={["click"]}>
-            <Button className={styles.connectButton} icon={<WalletOutlined />}>
-              {getDisplayAddress()}
+            <Button className="connect-button" icon={<WalletOutlined />}>
+              <Name address={(currentInfo?.address as any) || ""}></Name>
             </Button>
           </Dropdown>
         )}
-
       </Space>
     </>
   );

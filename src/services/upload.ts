@@ -33,6 +33,7 @@ interface IUploadRes {
  */
 export interface IAgentData {
   name: string;
+  agent_type: number;
   functionDesc: string;
   behaviorDesc: string;
   did: string;
@@ -165,7 +166,6 @@ export const getAllRecords = async (): Promise<{
 
       // get all records
       const records = await contract.fetchData(0, count);
-      console.log(records, "records");
       // format records
       const formattedRecords: IRecord[] = records
         .map((record: any) => ({
@@ -409,6 +409,7 @@ interface IRecordDataParam {
 export interface IUploadData {
   name: string;
   avatar: File;
+  agent_type: number;
   functionDesc: string;
   behaviorDesc: string;
   dataset: string;
@@ -458,9 +459,9 @@ export const createContractRecord = async (
     const chatKnowledgeBase = [
       formData.website,
       formData.website1,
-      formData.website2
-    ].filter(url => url && url.trim() !== '');
-    
+      formData.website2,
+    ].filter((url) => url && url.trim() !== "");
+
     const { htmlString } = generateHTML({
       name: formData.name,
       avatar: avatarCid[0].cid,
@@ -471,13 +472,14 @@ export const createContractRecord = async (
       dataset: formData.dataset,
       blogPrompt: formData.blogPrompt,
       hasBlog: formData.hasBlog,
+      agent_type: formData.agent_type,
       hasRAG: formData.hasRAG,
       agentId: agentId,
     });
 
     const JSON_DATA = {
       version: 1,
-      agent_type: formData.hasBlog ? 2 : 1,
+      agent_type: formData.agent_type,
       agent_id: agentId,
       agent_name: formData.name,
       agent_avatar: avatarCid[0].cid,
@@ -581,6 +583,11 @@ export const uploadToIPFS = async (
   }
 };
 
+enum EAgentType {
+  NORMAL = 2,
+  NOUNS = 3,
+}
+
 /**
  * Generate HTML content for AI agent
  * @param data Agent data
@@ -604,6 +611,7 @@ export const generateHTML = (data: IAgentData) => {
     hasBlog: data.hasBlog,
     hasRAG: data.hasRAG,
     avatar: avatarUrl,
+    agentType: data.agent_type,
     agentId: data.agentId,
     network: data.network,
   };
@@ -620,8 +628,17 @@ export const generateHTML = (data: IAgentData) => {
   <script>
     window.aiData = ${JSON.stringify(metaData, null, 2)};
   </script>
+  ${
+    data.agent_type === EAgentType.NOUNS
+      ? `
+  <script type="module" crossorigin src="https://aipfs.glitterprotocol.tech/nouns/nouns.js"></script>
+  <link rel="stylesheet" crossorigin href="https://aipfs.glitterprotocol.tech/nouns/nouns.css">
+  `
+      : `
   <script type="module" crossorigin src="https://aipfs.glitterprotocol.tech/agent/agent.js"></script>
   <link rel="stylesheet" crossorigin href="https://aipfs.glitterprotocol.tech/agent/agent.css">
+  `
+  }
 </head>
 <body>
   <div id="root-ai-agent"></div>
